@@ -8,6 +8,10 @@ function formTypeLabel(type: string) {
       return "Excavator Loader Pre-Shift Inspection"
     case "excavator-harvester":
       return "Excavator Harvester Pre-Shift Inspection"
+    case "lowbed-trailer":
+      return "Lowbed & Roll Back Trailer Pre-Shift Inspection"
+    case "mechanic-ldv":
+      return "Mechanic LDV Daily Checklist"
     default:
       return type
   }
@@ -124,46 +128,86 @@ export function exportSingleSubmissionToCSV(sub: Submission): void {
 
 // ─── PDF Export ────────────────────────────────────────────────
 
+async function getLogoBase64(): Promise<string> {
+  try {
+    if (typeof window === 'undefined') {
+      const fs = require('fs');
+      const path = require('path');
+      const logoPath = path.join(process.cwd(), 'public', 'images', 'ringomode-logo.png');
+      const logoBuffer = fs.readFileSync(logoPath);
+      return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+    } else {
+      const response = await fetch('/images/ringomode-logo.png');
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch (error) {
+    console.error('Failed to load logo:', error);
+    return '';
+  }
+}
+
 export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
   const { default: jsPDF } = await import("jspdf")
   await import("jspdf-autotable")
 
   const doc = new jsPDF("p", "mm", "a4")
   const pageWidth = doc.internal.pageSize.getWidth()
+  
+  // ===== ONLY ADDED LOGO AT THE TOP =====
+  const logoBase64 = await getLogoBase64();
+  let yOffset = 15;
+  
+  if (logoBase64) {
+    try {
+      // Add logo at position (14, 10) with width 40, height 12 (preserves aspect ratio)
+      doc.addImage(logoBase64, 'PNG', 14, 8, 40, 12);
+      yOffset = 28; // Push content down to make room for logo
+    } catch (error) {
+      console.error('Failed to add logo to PDF:', error);
+      yOffset = 15;
+    }
+  }
+  // ======================================
 
   // Title
   doc.setFontSize(10)
   doc.setTextColor(100)
-  doc.text("Ringomode DSP", 14, 15)
-  doc.text("Excellence - Relevance - Significance", 14, 20)
+  doc.text("Ringomode DSP", 14, yOffset)
+  doc.text("Excellence - Relevance - Significance", 14, yOffset + 5)
 
   doc.setFontSize(7)
   doc.setTextColor(150)
-  doc.text("HSE Management System", pageWidth - 14, 15, { align: "right" })
+  doc.text("HSE Management System", pageWidth - 14, yOffset, { align: "right" })
 
   doc.setDrawColor(34, 100, 54)
   doc.setLineWidth(0.5)
-  doc.line(14, 24, pageWidth - 14, 24)
+  doc.line(14, yOffset + 9, pageWidth - 14, yOffset + 9)
 
   // Form title
   doc.setFontSize(14)
   doc.setTextColor(34, 100, 54)
-  doc.text(formTypeLabel(sub.formType), 14, 33)
+  doc.text(formTypeLabel(sub.formType), 14, yOffset + 18)
 
   // Status badge
   doc.setFontSize(9)
   if (sub.hasDefects) {
     doc.setTextColor(220, 50, 50)
-    doc.text("DEFECTS FOUND", pageWidth - 14, 33, { align: "right" })
+    doc.text("DEFECTS FOUND", pageWidth - 14, yOffset + 18, { align: "right" })
   } else {
     doc.setTextColor(34, 139, 34)
-    doc.text("CLEAN", pageWidth - 14, 33, { align: "right" })
+    doc.text("CLEAN", pageWidth - 14, yOffset + 18, { align: "right" })
   }
 
   // Submission info
   doc.setFontSize(9)
   doc.setTextColor(60)
-  doc.text(`Submitted by: ${sub.submittedBy}`, 14, 41)
+  doc.text(`Submitted by: ${sub.submittedBy}`, 14, yOffset + 26)
   doc.text(
     `Date: ${new Date(sub.submittedAt).toLocaleDateString("en-ZA", {
       year: "numeric",
@@ -173,7 +217,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       minute: "2-digit",
     })}`,
     14,
-    46
+    yOffset + 31
   )
 
   // Form fields table
@@ -185,7 +229,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
   if (fieldRows.length > 0) {
     ;(doc as unknown as { autoTable: (options: Record<string, unknown>) => void }).autoTable({
-      startY: 52,
+      startY: yOffset + 37,
       head: [["Field", "Value"]],
       body: fieldRows,
       theme: "grid",
@@ -211,7 +255,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
   if (itemRows.length > 0) {
     const previousTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-    const startY = previousTable ? previousTable.finalY + 8 : 52
+    const startY = previousTable ? previousTable.finalY + 8 : yOffset + 37
 
     ;(doc as unknown as { autoTable: (options: Record<string, unknown>) => void }).autoTable({
       startY,
@@ -242,7 +286,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
   // Defect details
   const lastTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-  let currentY = lastTable ? lastTable.finalY + 8 : 52
+  let currentY = lastTable ? lastTable.finalY + 8 : yOffset + 37
 
   if (sub.data.defectDetails) {
     if (currentY > 260) {

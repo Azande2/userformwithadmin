@@ -57,16 +57,55 @@ export interface ExcavatorHarvesterFormData {
   signature: string
 }
 
+// ✅ ADDED: Lowbed Trailer Form Data
+export interface LowbedTrailerFormData {
+  operatorName: string
+  documentNo: string
+  date: string
+  unitNumber: string
+  trailerReg: string
+  hourMeterStart: string
+  hourMeterStop: string
+  validTrainingCard: string
+  items: Record<string, CheckStatus>
+  hasDefects: boolean
+  defectDetails: string
+  signature: string
+}
+
+// ✅ ADDED: Mechanic LDV Form Data
+export interface MechanicLDVFormData {
+  driverName: string
+  documentNo: string
+  vehicleRegistration: string
+  date: string
+  validTrainingCard: string
+  driversLicenseAvailable: string
+  odometerStart: string
+  odometerStop: string
+  items: Record<string, CheckStatus>
+  hasDefects: boolean
+  defectDetails: string
+  signature: string
+}
+
 // Union type for all form data
 export type FormDataUnion = 
   | LightDeliveryFormData 
   | ExcavatorLoaderFormData 
   | ExcavatorHarvesterFormData
+  | LowbedTrailerFormData      // ✅ ADDED
+  | MechanicLDVFormData        // ✅ ADDED
 
 // ============================================
 // FORM TYPE CONSTANTS
 // ============================================
-export type FormType = "light-delivery" | "excavator-loader" | "excavator-harvester"
+export type FormType = 
+  | "light-delivery" 
+  | "excavator-loader" 
+  | "excavator-harvester"
+  | "lowbed-trailer"          // ✅ ADDED
+  | "mechanic-ldv"            // ✅ ADDED
 
 // ============================================
 // SUBMISSION TYPE - WITH NOTIFICATION FIELDS
@@ -237,6 +276,67 @@ export const excavatorHarvesterItems = [
   "Computer / display functional",
 ] as const
 
+// ✅ ADDED: Lowbed Trailer Checklist Items
+export const lowbedTrailerItems = [
+  "Lowbed deck condition (no cracks/welds intact)",
+  "Roll back deck operation",
+  "Hydraulic system (no leaks)",
+  "Hydraulic hoses (condition/routing)",
+  "Ramps (condition/operation)",
+  "Ramp locks/pins",
+  "Winch (condition/operation)",
+  "Winch cable (no fraying)",
+  "Winch hook & safety latch",
+  "Tie down points (condition)",
+  "Ratchet straps/load binders",
+  "Lights (stop/tail/indicator/marker)",
+  "Reflectors/conspicuity tape",
+  "Mud flaps",
+  "Suspension (air bags/springs)",
+  "Brakes (service/park)",
+  "Brake chambers/lines",
+  "Axles/wheels",
+  "Tyres (condition/pressure)",
+  "Rim condition (no damage)",
+  "Wheel nuts (torque marks)",
+  "Landing gear (if semi-trailer)",
+  "Fifth wheel coupling (if applicable)",
+  "Safety chains/breakaway cable",
+  "Electrical plug/socket",
+  "Grease points",
+  "Fire extinguisher",
+  "Warning triangles/reflectors",
+  "Number plate (visible/secure)"
+] as const
+
+// ✅ ADDED: Mechanic LDV Checklist Items
+export const mechanicLDVItems = [
+  "Fire extinguisher (serviced & sealed)",
+  "First aid kit",
+  "Warning triangle & reflective jacket",
+  "Jacks & wheel spanner",
+  "Spare wheel (condition)",
+  "Tyres (condition & pressure)",
+  "Wheel nuts (torque marks visible)",
+  "Windscreen (cracks/chips)",
+  "Wipers & washers",
+  "Mirrors (rear view & side)",
+  "Lights (head, tail, brake, indicators)",
+  "Horn",
+  "Seat belts",
+  "Seats (condition & adjustment)",
+  "Brakes (foot & handbrake)",
+  "Steering",
+  "Engine oil level",
+  "Coolant level",
+  "Battery (condition & terminals)",
+  "Exhaust system (leaks)",
+  "Body (dents, damage)",
+  "Doors (locks & handles)",
+  "Fuel level",
+  "General cleanliness",
+] as const
+
 // ============================================
 // TYPE HELPERS
 // ============================================
@@ -244,12 +344,16 @@ export const excavatorHarvesterItems = [
 export type LightDeliveryItem = typeof lightDeliveryItems[number]
 export type ExcavatorLoaderItem = typeof excavatorLoaderItems[number]
 export type ExcavatorHarvesterItem = typeof excavatorHarvesterItems[number]
+export type LowbedTrailerItem = typeof lowbedTrailerItems[number]      // ✅ ADDED
+export type MechanicLDVItem = typeof mechanicLDVItems[number]          // ✅ ADDED
 
 // Map form type to its items type
 export type FormItemsMap = {
   'light-delivery': LightDeliveryItem
   'excavator-loader': ExcavatorLoaderItem
   'excavator-harvester': ExcavatorHarvesterItem
+  'lowbed-trailer': LowbedTrailerItem        // ✅ ADDED
+  'mechanic-ldv': MechanicLDVItem            // ✅ ADDED
 }
 
 // Map form type to its data type
@@ -257,6 +361,8 @@ export type FormDataMap = {
   'light-delivery': LightDeliveryFormData
   'excavator-loader': ExcavatorLoaderFormData
   'excavator-harvester': ExcavatorHarvesterFormData
+  'lowbed-trailer': LowbedTrailerFormData    // ✅ ADDED
+  'mechanic-ldv': MechanicLDVFormData        // ✅ ADDED
 }
 
 // ============================================
@@ -287,6 +393,20 @@ export const formConfigs: Record<FormType, FormConfig> = {
     title: 'Excavator Harvester Pre-Shift Inspection',
     description: 'Complete your pre-shift excavator harvester inspection checklist.',
     items: excavatorHarvesterItems
+  },
+  // ✅ ADDED: Lowbed Trailer config
+  'lowbed-trailer': {
+    type: 'lowbed-trailer',
+    title: 'Lowbed & Roll Back Trailer Pre-Shift Inspection',
+    description: 'Complete the lowbed and roll back trailer pre-shift use inspection checklist.',
+    items: lowbedTrailerItems
+  },
+  // ✅ ADDED: Mechanic LDV config
+  'mechanic-ldv': {
+    type: 'mechanic-ldv',
+    title: 'Mechanic LDV Daily Checklist',
+    description: 'Complete the mechanic light delivery vehicle daily inspection checklist.',
+    items: mechanicLDVItems
   }
 }
 
@@ -307,6 +427,17 @@ export function isExcavatorHarvesterFormData(data: FormDataUnion): data is Excav
          (data as ExcavatorHarvesterFormData).hourMeterStart !== undefined
 }
 
+// ✅ ADDED: Type guard for Lowbed Trailer
+export function isLowbedTrailerFormData(data: FormDataUnion): data is LowbedTrailerFormData {
+  return (data as LowbedTrailerFormData).trailerReg !== undefined
+}
+
+// ✅ ADDED: Type guard for Mechanic LDV
+export function isMechanicLDVFormData(data: FormDataUnion): data is MechanicLDVFormData {
+  return (data as MechanicLDVFormData).vehicleRegistration !== undefined && 
+         (data as MechanicLDVFormData).odometerStart !== undefined
+}
+
 // Get form title from form type
 export function getFormTitle(type: FormType): string {
   return formConfigs[type].title
@@ -320,4 +451,61 @@ export function getFormDescription(type: FormType): string {
 // Get form items from form type
 export function getFormItems(type: FormType): readonly string[] {
   return formConfigs[type].items
+}
+
+// ============================================
+// FORM LABEL HELPERS (for admin dashboard)
+// ============================================
+export function getFormTypeLabel(type: FormType): string {
+  const labels: Record<FormType, string> = {
+    'light-delivery': 'Light Delivery Vehicle',
+    'excavator-loader': 'Excavator Loader',
+    'excavator-harvester': 'Excavator Harvester',
+    'lowbed-trailer': 'Lowbed & Roll Back Trailer',
+    'mechanic-ldv': 'Mechanic LDV'
+  }
+  return labels[type]
+}
+
+// ============================================
+// INITIAL FORM VALUES
+// ============================================
+export function getInitialItems(formType: FormType): Record<string, CheckStatus> {
+  const items = getFormItems(formType)
+  return Object.fromEntries(items.map((item) => [item, null]))
+}
+
+export function getInitialFormData(formType: FormType): Partial<FormDataUnion> {
+  switch (formType) {
+    case 'light-delivery':
+    case 'mechanic-ldv':
+      return {
+        driverName: '',
+        documentNo: '',
+        vehicleRegistration: '',
+        date: new Date().toISOString().split('T')[0],
+        validTrainingCard: '',
+        driversLicenseAvailable: '',
+        odometerStart: '',
+        odometerStop: '',
+        defectDetails: '',
+        signature: ''
+      }
+    case 'excavator-loader':
+    case 'excavator-harvester':
+    case 'lowbed-trailer':
+      return {
+        operatorName: '',
+        documentNo: '',
+        date: new Date().toISOString().split('T')[0],
+        unitNumber: '',
+        hourMeterStart: '',
+        hourMeterStop: '',
+        validTrainingCard: '',
+        defectDetails: '',
+        signature: ''
+      }
+    default:
+      return {}
+  }
 }

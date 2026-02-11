@@ -46,6 +46,11 @@ import {
   FileSpreadsheet,
   MoreHorizontal,
   Printer,
+  Truck,
+  Construction,
+  Trees,
+  Container,
+  Wrench,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -70,6 +75,7 @@ function StatusBadge({ status }: { status: CheckStatus }) {
   return <Badge className={config.className}>{config.label}</Badge>
 }
 
+// ✅ UPDATED: Added new form types
 function formTypeLabel(type: string) {
   switch (type) {
     case "light-delivery":
@@ -78,8 +84,30 @@ function formTypeLabel(type: string) {
       return "Excavator Loader"
     case "excavator-harvester":
       return "Excavator Harvester"
+    case "lowbed-trailer":
+      return "Lowbed & Roll Back Trailer"
+    case "mechanic-ldv":
+      return "Mechanic LDV"
     default:
       return type
+  }
+}
+
+// ✅ ADDED: Form icon mapping
+function getFormIcon(type: string) {
+  switch (type) {
+    case "light-delivery":
+      return <Truck className="h-4 w-4 text-muted-foreground" />
+    case "excavator-loader":
+      return <Construction className="h-4 w-4 text-muted-foreground" />
+    case "excavator-harvester":
+      return <Trees className="h-4 w-4 text-muted-foreground" />
+    case "lowbed-trailer":
+      return <Container className="h-4 w-4 text-muted-foreground" />
+    case "mechanic-ldv":
+      return <Wrench className="h-4 w-4 text-muted-foreground" />
+    default:
+      return <FileText className="h-4 w-4 text-muted-foreground" />
   }
 }
 
@@ -90,7 +118,7 @@ function formatFieldKey(key: string): string {
     .trim()
 }
 
-// â”€â”€â”€ Preview Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Preview Component
 function SubmissionPreview({ submission }: { submission: Submission }) {
   return (
     <div className="space-y-6 print:space-y-4" id="submission-preview">
@@ -224,7 +252,7 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
   )
 }
 
-// â”€â”€â”€ Main Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Main Dashboard
 export function AdminDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
@@ -233,6 +261,10 @@ export function AdminDashboard() {
   const [defectFilter, setDefectFilter] = useState<string>("all")
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [dialogTab, setDialogTab] = useState<string>("preview")
+
+  // ✅ ADDED: Notification states
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [notifications, setNotifications] = useState<any[]>([])
 
   const fetchSubmissions = useCallback(async () => {
     setLoading(true)
@@ -247,9 +279,54 @@ export function AdminDashboard() {
     }
   }, [])
 
+  // ✅ ADDED: Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications")
+      const data = await res.json()
+      setNotifications(data.notifications || [])
+      setUnreadCount(data.unreadCount || 0)
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error)
+    }
+  }, [])
+
+  // ✅ ADDED: Mark as read function
+  const markAsRead = async (submissionId: string) => {
+    try {
+      await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      })
+      
+      setNotifications(prev => prev.filter(n => n.id !== submissionId))
+      setUnreadCount(prev => Math.max(0, prev - 1))
+      
+      setSubmissions(prev =>
+        prev.map(sub =>
+          sub.id === submissionId ? { ...sub, isRead: true } : sub
+        )
+      )
+      
+      toast.success("Marked as read")
+    } catch (error) {
+      toast.error("Failed to mark as read")
+    }
+  }
+
   useEffect(() => {
     fetchSubmissions()
-  }, [fetchSubmissions])
+    fetchNotifications()
+    
+    // Poll for new notifications every 10 seconds
+    const interval = setInterval(() => {
+      fetchNotifications()
+      fetchSubmissions()
+    }, 10000)
+    
+    return () => clearInterval(interval)
+  }, [fetchSubmissions, fetchNotifications])
 
   const filtered = submissions.filter((s) => {
     const matchesSearch =
@@ -299,7 +376,7 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6 p-4 lg:p-8">
-      {/* Header */}
+      {/* Header with Notification Bell */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Image
@@ -317,6 +394,50 @@ export function AdminDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* ✅ ADDED: Notification Bell */}
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-transparent relative"
+              onClick={() => {
+                if (notifications.length > 0) {
+                  const first = notifications[0]
+                  toast.info(
+                    <div className="flex flex-col gap-1">
+                      <p className="font-semibold">{first.title}</p>
+                      <p className="text-sm">{first.message}</p>
+                      <Button 
+                        size="sm" 
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          markAsRead(first.id)
+                          const sub = submissions.find(s => s.id === first.id)
+                          if (sub) {
+                            setSelectedSubmission(sub)
+                            setDialogTab("preview")
+                          }
+                        }}
+                      >
+                        View Submission
+                      </Button>
+                    </div>
+                  )
+                }
+              }}
+            >
+              <span className="relative">
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span className="hidden sm:inline">Notifications</span>
+            </Button>
+          </div>
+          
           <Button
             variant="outline"
             size="sm"
@@ -406,6 +527,9 @@ export function AdminDashboard() {
                 <SelectItem value="light-delivery">Light Delivery</SelectItem>
                 <SelectItem value="excavator-loader">Excavator Loader</SelectItem>
                 <SelectItem value="excavator-harvester">Excavator Harvester</SelectItem>
+                {/* ✅ ADDED: New form types */}
+                <SelectItem value="lowbed-trailer">Lowbed & Roll Back</SelectItem>
+                <SelectItem value="mechanic-ldv">Mechanic LDV</SelectItem>
               </SelectContent>
             </Select>
             <Select value={defectFilter} onValueChange={setDefectFilter}>
@@ -459,7 +583,7 @@ export function AdminDashboard() {
                   {filtered.map((sub) => (
                     <TableRow
                       key={sub.id}
-                      className={sub.hasDefects ? "bg-destructive/5" : ""}
+                      className={`${sub.hasDefects ? "bg-destructive/5" : ""} ${!sub.isRead ? "border-l-4 border-l-blue-500" : ""}`}
                     >
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
@@ -469,7 +593,8 @@ export function AdminDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          {/* ✅ UPDATED: Dynamic icon based on form type */}
+                          {getFormIcon(sub.formType)}
                           <span className="text-foreground">
                             {formTypeLabel(sub.formType)}
                           </span>
@@ -503,12 +628,31 @@ export function AdminDashboard() {
                             onClick={() => {
                               setSelectedSubmission(sub)
                               setDialogTab("preview")
+                              // Auto-mark as read when viewing
+                              if (!sub.isRead) {
+                                markAsRead(sub.id)
+                              }
                             }}
                             className="gap-2 text-primary"
                           >
                             <Eye className="h-4 w-4" />
                             <span className="hidden sm:inline">View</span>
                           </Button>
+                          
+                          {/* ✅ ADDED: Mark as read button for unread submissions */}
+                          {!sub.isRead && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => markAsRead(sub.id)}
+                              className="gap-2 text-green-600"
+                              title="Mark as read"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span className="hidden sm:inline">Mark Read</span>
+                            </Button>
+                          )}
+                          
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -551,7 +695,12 @@ export function AdminDashboard() {
       {/* Submission Detail / Preview Dialog */}
       <Dialog
         open={!!selectedSubmission}
-        onOpenChange={() => setSelectedSubmission(null)}
+        onOpenChange={(open) => {
+          if (!open && selectedSubmission && !selectedSubmission.isRead) {
+            markAsRead(selectedSubmission.id)
+          }
+          setSelectedSubmission(null)
+        }}
       >
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
           <DialogHeader>
@@ -741,4 +890,3 @@ export function AdminDashboard() {
     </div>
   )
 }
-

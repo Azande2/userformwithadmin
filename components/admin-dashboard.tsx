@@ -1,0 +1,744 @@
+﻿"use client"
+
+import { useState, useEffect, useCallback } from "react"
+import Image from "next/image"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { Submission, CheckStatus } from "@/lib/types"
+import {
+  exportSubmissionsToCSV,
+  exportSingleSubmissionToCSV,
+  exportSubmissionToPDF,
+} from "@/lib/export-utils"
+import {
+  ClipboardList,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  RefreshCw,
+  Eye,
+  Calendar,
+  User,
+  FileText,
+  Download,
+  FileDown,
+  FileSpreadsheet,
+  MoreHorizontal,
+  Printer,
+} from "lucide-react"
+import { toast } from "sonner"
+
+function StatusBadge({ status }: { status: CheckStatus }) {
+  if (!status) return <span className="text-muted-foreground">-</span>
+  const map = {
+    ok: {
+      label: "OK",
+      className:
+        "bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)] hover:bg-[hsl(142,76%,32%)]",
+    },
+    def: {
+      label: "Defect",
+      className: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+    },
+    na: {
+      label: "N/A",
+      className: "bg-muted text-muted-foreground hover:bg-muted/80",
+    },
+  }
+  const config = map[status]
+  return <Badge className={config.className}>{config.label}</Badge>
+}
+
+function formTypeLabel(type: string) {
+  switch (type) {
+    case "light-delivery":
+      return "Light Delivery Vehicle"
+    case "excavator-loader":
+      return "Excavator Loader"
+    case "excavator-harvester":
+      return "Excavator Harvester"
+    default:
+      return type
+  }
+}
+
+function formatFieldKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim()
+}
+
+// â”€â”€â”€ Preview Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SubmissionPreview({ submission }: { submission: Submission }) {
+  return (
+    <div className="space-y-6 print:space-y-4" id="submission-preview">
+      {/* Print Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <Image
+            src="/images/ringomode-logo.png"
+            alt="Ringomode DSP logo"
+            width={140}
+            height={45}
+            className="object-contain"
+          />
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">HSE Management System</p>
+          <p className="text-xs text-muted-foreground">
+            {new Date(submission.submittedAt).toLocaleDateString("en-ZA", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Title + Status */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-foreground">{submission.formTitle}</h2>
+        {submission.hasDefects ? (
+          <Badge className="bg-destructive text-destructive-foreground">Defects Found</Badge>
+        ) : (
+          <Badge className="bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)]">Clean</Badge>
+        )}
+      </div>
+
+      {/* Form Fields */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm text-foreground">Form Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-muted-foreground">Submitted By</span>
+              <span className="font-medium text-foreground">{submission.submittedBy}</span>
+            </div>
+            {Object.entries(submission.data)
+              .filter(
+                ([key]) =>
+                  key !== "items" &&
+                  key !== "hasDefects" &&
+                  key !== "defectDetails" &&
+                  key !== "signature"
+              )
+              .map(([key, value]) => (
+                <div key={key} className="flex flex-col">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {formatFieldKey(key)}
+                  </span>
+                  <span className="font-medium text-foreground">{String(value) || "-"}</span>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Inspection Items */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm text-foreground">Inspection Items</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {/* Table header */}
+          <div className="flex items-center justify-between rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+            <span>Item</span>
+            <span>Status</span>
+          </div>
+          {submission.data.items &&
+            Object.entries(submission.data.items).map(([item, status], idx) => (
+              <div
+                key={item}
+                className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
+                  status === "def"
+                    ? "bg-destructive/5"
+                    : idx % 2 === 0
+                      ? "bg-muted/30"
+                      : "bg-card"
+                }`}
+              >
+                <span className="text-foreground">{item}</span>
+                <StatusBadge status={status as CheckStatus} />
+              </div>
+            ))}
+        </CardContent>
+      </Card>
+
+      {/* Defect Details */}
+      {submission.data.defectDetails && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Defect Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-foreground">{submission.data.defectDetails}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Signature */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm text-foreground">Signature</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="inline-block border-b-2 border-foreground/20 pb-1">
+            <p className="font-serif text-base italic text-foreground">
+              {submission.data.signature || "-"}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// â”€â”€â”€ Main Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export function AdminDashboard() {
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [typeFilter, setTypeFilter] = useState<string>("all")
+  const [defectFilter, setDefectFilter] = useState<string>("all")
+  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
+  const [dialogTab, setDialogTab] = useState<string>("preview")
+
+  const fetchSubmissions = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/submissions")
+      const data = await res.json()
+      setSubmissions(data)
+    } catch {
+      console.error("Failed to fetch submissions")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSubmissions()
+  }, [fetchSubmissions])
+
+  const filtered = submissions.filter((s) => {
+    const matchesSearch =
+      s.submittedBy.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.formTitle.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesType = typeFilter === "all" || s.formType === typeFilter
+    const matchesDefect =
+      defectFilter === "all" ||
+      (defectFilter === "defects" && s.hasDefects) ||
+      (defectFilter === "clean" && !s.hasDefects)
+    return matchesSearch && matchesType && matchesDefect
+  })
+
+  const totalSubmissions = submissions.length
+  const defectCount = submissions.filter((s) => s.hasDefects).length
+  const cleanCount = submissions.filter((s) => !s.hasDefects).length
+  const todayCount = submissions.filter(
+    (s) => new Date(s.submittedAt).toDateString() === new Date().toDateString()
+  ).length
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) {
+      toast.error("No submissions to export")
+      return
+    }
+    exportSubmissionsToCSV(filtered)
+    toast.success(`Exported ${filtered.length} submission(s) to CSV`)
+  }
+
+  const handleSingleCSV = (sub: Submission) => {
+    exportSingleSubmissionToCSV(sub)
+    toast.success("Exported submission to CSV")
+  }
+
+  const handleSinglePDF = async (sub: Submission) => {
+    try {
+      await exportSubmissionToPDF(sub)
+      toast.success("PDF downloaded successfully")
+    } catch {
+      toast.error("Failed to generate PDF")
+    }
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  return (
+    <div className="space-y-6 p-4 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <Image
+            src="/images/ringomode-logo.png"
+            alt="Ringomode DSP logo"
+            width={140}
+            height={48}
+            className="object-contain"
+          />
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              Review and manage HSE inspection submissions
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            disabled={filtered.length === 0}
+            className="gap-2 bg-transparent"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Export All CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <ClipboardList className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-foreground">{totalSubmissions}</div>
+              <div className="text-xs text-muted-foreground">Total Submissions</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-foreground">{defectCount}</div>
+              <div className="text-xs text-muted-foreground">With Defects</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[hsl(142,76%,36%)]/10">
+              <CheckCircle2 className="h-5 w-5 text-[hsl(142,76%,36%)]" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-foreground">{cleanCount}</div>
+              <div className="text-xs text-muted-foreground">Clean Inspections</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <Calendar className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-foreground">{todayCount}</div>
+              <div className="text-xs text-muted-foreground">Today</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Submissions Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base text-foreground">Submissions</CardTitle>
+          <CardDescription>
+            Filter and review all submitted inspection checklists.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or form type..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Form Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="light-delivery">Light Delivery</SelectItem>
+                <SelectItem value="excavator-loader">Excavator Loader</SelectItem>
+                <SelectItem value="excavator-harvester">Excavator Harvester</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={defectFilter} onValueChange={setDefectFilter}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="defects">With Defects</SelectItem>
+                <SelectItem value="clean">Clean Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchSubmissions}
+              disabled={loading}
+              className="gap-2 bg-transparent"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {/* Table */}
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <ClipboardList className="mb-3 h-10 w-10 text-muted-foreground/40" />
+              <p className="text-sm font-medium text-muted-foreground">
+                No submissions found
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                {totalSubmissions === 0
+                  ? "Submissions will appear here once users complete inspection forms."
+                  : "Try adjusting your filters to find what you're looking for."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="text-foreground">Submitted By</TableHead>
+                    <TableHead className="text-foreground">Form Type</TableHead>
+                    <TableHead className="text-foreground">Date</TableHead>
+                    <TableHead className="text-foreground">Status</TableHead>
+                    <TableHead className="text-right text-foreground">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((sub) => (
+                    <TableRow
+                      key={sub.id}
+                      className={sub.hasDefects ? "bg-destructive/5" : ""}
+                    >
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          {sub.submittedBy}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-foreground">
+                            {formTypeLabel(sub.formType)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(sub.submittedAt).toLocaleDateString("en-ZA", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        {sub.hasDefects ? (
+                          <Badge className="bg-destructive text-destructive-foreground">
+                            Defects Found
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)]">
+                            Clean
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedSubmission(sub)
+                              setDialogTab("preview")
+                            }}
+                            className="gap-2 text-primary"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="hidden sm:inline">View</span>
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open export menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedSubmission(sub)
+                                  setDialogTab("preview")
+                                }}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                Preview
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleSinglePDF(sub)}>
+                                <FileDown className="mr-2 h-4 w-4" />
+                                Download PDF
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleSingleCSV(sub)}>
+                                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                Download CSV
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Submission Detail / Preview Dialog */}
+      <Dialog
+        open={!!selectedSubmission}
+        onOpenChange={() => setSelectedSubmission(null)}
+      >
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {selectedSubmission?.formTitle}
+            </DialogTitle>
+            <DialogDescription>
+              Submitted by {selectedSubmission?.submittedBy} on{" "}
+              {selectedSubmission &&
+                new Date(selectedSubmission.submittedAt).toLocaleDateString("en-ZA", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSubmission && (
+            <Tabs
+              value={dialogTab}
+              onValueChange={setDialogTab}
+              className="flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between">
+                <TabsList>
+                  <TabsTrigger value="preview" className="gap-2">
+                    <Eye className="h-3.5 w-3.5" />
+                    Preview
+                  </TabsTrigger>
+                  <TabsTrigger value="data" className="gap-2">
+                    <FileText className="h-3.5 w-3.5" />
+                    Raw Data
+                  </TabsTrigger>
+                </TabsList>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSinglePDF(selectedSubmission)}
+                    className="gap-2 bg-transparent text-xs"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSingleCSV(selectedSubmission)}
+                    className="gap-2 bg-transparent text-xs"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrint}
+                    className="gap-2 bg-transparent text-xs"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print
+                  </Button>
+                </div>
+              </div>
+
+              <TabsContent
+                value="preview"
+                className="mt-4 flex-1 overflow-hidden"
+              >
+                <ScrollArea className="h-[55vh] pr-4">
+                  <SubmissionPreview submission={selectedSubmission} />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent
+                value="data"
+                className="mt-4 flex-1 overflow-hidden"
+              >
+                <ScrollArea className="h-[55vh] pr-4">
+                  <div className="space-y-4">
+                    {/* Overall Status */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        Overall Status:
+                      </span>
+                      {selectedSubmission.hasDefects ? (
+                        <Badge className="bg-destructive text-destructive-foreground">
+                          Defects Found
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)]">
+                          Clean
+                        </Badge>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Form Fields */}
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold text-foreground">
+                        Form Information
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {Object.entries(selectedSubmission.data)
+                          .filter(
+                            ([key]) =>
+                              key !== "items" &&
+                              key !== "hasDefects" &&
+                              key !== "defectDetails" &&
+                              key !== "signature"
+                          )
+                          .map(([key, value]) => (
+                            <div key={key} className="flex flex-col">
+                              <span className="text-xs text-muted-foreground">
+                                {formatFieldKey(key)}
+                              </span>
+                              <span className="font-medium text-foreground">
+                                {String(value) || "-"}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Inspection Items */}
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold text-foreground">
+                        Inspection Items
+                      </h4>
+                      <div className="space-y-1">
+                        {selectedSubmission.data.items &&
+                          Object.entries(selectedSubmission.data.items).map(
+                            ([item, status]) => (
+                              <div
+                                key={item}
+                                className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
+                                  status === "def"
+                                    ? "bg-destructive/5"
+                                    : "bg-muted/50"
+                                }`}
+                              >
+                                <span className="text-foreground">{item}</span>
+                                <StatusBadge status={status as CheckStatus} />
+                              </div>
+                            )
+                          )}
+                      </div>
+                    </div>
+
+                    {/* Defect Details */}
+                    {selectedSubmission.data.defectDetails && (
+                      <>
+                        <Separator />
+                        <div>
+                          <h4 className="mb-2 text-sm font-semibold text-destructive">
+                            Defect Details
+                          </h4>
+                          <p className="rounded-md bg-destructive/5 p-3 text-sm text-foreground">
+                            {selectedSubmission.data.defectDetails}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Signature */}
+                    <Separator />
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold text-foreground">
+                        Signature
+                      </h4>
+                      <p className="text-sm italic text-muted-foreground">
+                        {selectedSubmission.data.signature || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+

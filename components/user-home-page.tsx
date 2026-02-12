@@ -12,13 +12,8 @@ import {
   Container, 
   Wrench, 
   ArrowRight, 
-  ClipboardList, 
-  Shield,
-  Download,
-  FileText,
-  FileSpreadsheet
+  ClipboardList
 } from "lucide-react"
-import { toast } from "sonner"
 
 const forms = [
   {
@@ -74,33 +69,6 @@ const forms = [
 ]
 
 export function UserHomePage() {
-  const downloadTemplate = async (formId: string, format: 'pdf' | 'csv') => {
-    try {
-      toast.loading(`Downloading ${formId} template...`, { id: `download-${formId}` })
-      
-      const response = await fetch(`/api/templates?type=${formId}&format=${format}`)
-      
-      if (!response.ok) {
-        throw new Error('Download failed')
-      }
-      
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${formId}-template.${format}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-      
-      toast.success(`${format.toUpperCase()} template downloaded successfully!`, { id: `download-${formId}` })
-    } catch (error) {
-      toast.error(`Failed to download template`, { id: `download-${formId}` })
-      console.error('Download error:', error)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader role="user" />
@@ -119,48 +87,18 @@ export function UserHomePage() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="mb-8 grid grid-cols-3 gap-4 sm:grid-cols-5 lg:grid-cols-5">
-          <Card className="text-center">
+        {/* Stats - Single card: Available Forms */}
+        <div className="mb-8 flex justify-center">
+          <Card className="text-center w-full max-w-xs">
             <CardContent className="pt-6">
               <ClipboardList className="mx-auto mb-2 h-6 w-6 text-primary" />
               <div className="text-2xl font-bold text-foreground">{forms.length}</div>
               <div className="text-xs text-muted-foreground">Available Forms</div>
             </CardContent>
           </Card>
-          <Card className="text-center">
-            <CardContent className="pt-6">
-              <Shield className="mx-auto mb-2 h-6 w-6 text-primary" />
-              <div className="text-2xl font-bold text-foreground">HSE</div>
-              <div className="text-xs text-muted-foreground">Compliant</div>
-            </CardContent>
-          </Card>
-          <Card className="text-center">
-            <CardContent className="pt-6">
-              <svg className="mx-auto mb-2 h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="text-2xl font-bold text-foreground">Digital</div>
-              <div className="text-xs text-muted-foreground">Paperless</div>
-            </CardContent>
-          </Card>
-          <Card className="text-center hidden sm:block">
-            <CardContent className="pt-6">
-              <Container className="mx-auto mb-2 h-6 w-6 text-primary" />
-              <div className="text-2xl font-bold text-foreground">Trailer</div>
-              <div className="text-xs text-muted-foreground">Lowbed</div>
-            </CardContent>
-          </Card>
-          <Card className="text-center hidden sm:block">
-            <CardContent className="pt-6">
-              <Wrench className="mx-auto mb-2 h-6 w-6 text-primary" />
-              <div className="text-2xl font-bold text-foreground">Mechanic</div>
-              <div className="text-xs text-muted-foreground">LDV</div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Form Cards with Download Buttons */}
+        {/* Form Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
           {forms.map((form) => {
             const Icon = form.icon
@@ -187,30 +125,8 @@ export function UserHomePage() {
                     <span className="font-mono">{form.docRef}</span>
                   </div>
 
-                  {/* Download Buttons */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => downloadTemplate(form.id, 'pdf')}
-                      className="gap-1 text-xs h-8"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      PDF
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => downloadTemplate(form.id, 'csv')}
-                      className="gap-1 text-xs h-8"
-                    >
-                      <FileSpreadsheet className="h-3.5 w-3.5" />
-                      CSV
-                    </Button>
-                  </div>
-
                   {/* Start Inspection Button */}
-                  <Button asChild className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 mt-1">
+                  <Button asChild className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 mt-2">
                     <Link href={form.href}>
                       Start Inspection
                       <ArrowRight className="h-4 w-4" />
@@ -244,20 +160,6 @@ export function UserHomePage() {
             <p className="text-xs font-medium text-red-700">Mechanic LDV</p>
             <p className="text-lg font-bold text-red-800">24 items</p>
           </div>
-        </div>
-
-        {/* Templates Info Banner */}
-        <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Download className="h-5 w-5 text-blue-600" />
-            <div>
-              <p className="text-sm font-medium text-blue-800">Need blank templates?</p>
-              <p className="text-xs text-blue-600">Download PDF or CSV templates from any form card above</p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="bg-white" asChild>
-            <Link href="/templates">Browse All Templates</Link>
-          </Button>
         </div>
 
         {/* Footer */}

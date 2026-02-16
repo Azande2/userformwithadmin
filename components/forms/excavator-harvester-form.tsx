@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChecklistRadioGroup } from "@/components/checklist-radio-group"
+import { ChecklistRadioGroup } from "@/components/checklist-radio-group" // ✅ IMPORT ADDED
 import { excavatorHarvesterItems, type CheckStatus } from "@/lib/types"
 import { AlertTriangle, CheckCircle2, Send, ArrowLeft, AlertCircle, Eraser } from "lucide-react"
 import Link from "next/link"
@@ -252,7 +252,7 @@ const sections = [
 
 const allItems = sections.flatMap((section) => section.items)
 
-// ─── Helper: renders a grouped section with icon in the MIDDLE (200×200) ───
+// ─── Helper: renders a grouped section with icon in the MIDDLE and visible row borders
 const renderGroupedSection = (
   title: string,
   items: string[],
@@ -268,9 +268,9 @@ const renderGroupedSection = (
     <div key={title} className="space-y-2">
       <h4 className="text-sm font-semibold text-primary">{title}</h4>
       <div className="ml-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
-        {/* First half of items */}
+        {/* First half of items – each with bottom border */}
         {firstHalf.map((item) => (
-          <div key={item} className="flex items-center justify-between">
+          <div key={item} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
             <span className="text-sm text-foreground">{item}</span>
             <div className="flex items-center gap-2">
               <Button
@@ -316,8 +316,8 @@ const renderGroupedSection = (
           </div>
         ))}
 
-        {/* Icon – BIG, CENTERED (200×200) */}
-        <div className="flex justify-center py-6">
+        {/* Icon row – highlighted background */}
+        <div className="flex justify-center py-4 bg-gray-100 rounded-md">
           <Image
             src={iconSrc}
             alt={`${title} icon`}
@@ -327,9 +327,9 @@ const renderGroupedSection = (
           />
         </div>
 
-        {/* Second half of items */}
+        {/* Second half of items – each with bottom border */}
         {secondHalf.map((item) => (
-          <div key={item} className="flex items-center justify-between">
+          <div key={item} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
             <span className="text-sm text-foreground">{item}</span>
             <div className="flex items-center gap-2">
               <Button
@@ -793,7 +793,7 @@ export function ExcavatorHarvesterForm() {
         />
       </div>
 
-      {/* INSPECTION ITEMS – ALL 34 SECTIONS GROUPED WITH ICONS */}
+      {/* INSPECTION ITEMS – ALL 34 SECTIONS GROUPED WITH VISIBLE ROW BORDERS */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base text-foreground">Inspection Items</CardTitle>
@@ -1110,7 +1110,7 @@ export function ExcavatorHarvesterForm() {
               )
             }
 
-            // ----- Fallback (should never be reached) -----
+            // ----- Fallback (should never be reached) – now with typed onChange -----
             return (
               <div key={sectionIdx} className="space-y-2">
                 <h4 className="text-sm font-semibold text-primary">{section.title}</h4>
@@ -1120,7 +1120,7 @@ export function ExcavatorHarvesterForm() {
                       key={`${sectionIdx}-${itemIdx}`}
                       label={item}
                       value={items[item]}
-                      onChange={(val) => handleItemChange(item, val)}
+                      onChange={(val: CheckStatus) => handleItemChange(item, val)} // ✅ explicit type
                       index={itemIdx}
                     />
                   ))}

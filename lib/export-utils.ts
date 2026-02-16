@@ -1,9 +1,12 @@
 import type { Submission, CheckStatus } from "@/lib/types"
 
 // ============================================================================
-// SECTIONS ARRAY – EXACTLY THE SAME AS YOUR WEB FORM (34 sections)
+// EXCAVATOR HARVESTER SECTIONS (34 sections)
 // ============================================================================
-const sections = [
+const sections: {
+  title: string;
+  items: string[];
+}[] = [
   {
     title: "License and Phepha",
     items: ["Phepha valid.", "Displayed and visible."]
@@ -234,10 +237,10 @@ const sections = [
       "Gauges in order."
     ]
   }
-]
+];
 
 // ============================================================================
-// ICON MAPPING – maps section titles to image filenames
+// EXCAVATOR HARVESTER SECTION‑LEVEL ICON MAPPING
 // ============================================================================
 const iconMap: Record<string, string> = {
   "License and Phepha": "license2.png",
@@ -274,23 +277,53 @@ const iconMap: Record<string, string> = {
   "Escape Hatch & Hammer": "escape-hatch.png",
   "Communication": "communication.png",
   "Fire Systems": "fire-system.png"
-}
+};
+
+// ============================================================================
+// LIGHT DELIVERY ITEM‑LEVEL ICON MAPPING (matches web form)
+// ============================================================================
+const lightItemIconMap: Record<string, string> = {
+  "Drivers license available": "license2.png",
+  "Valid training card": "license2.png",
+  "Vehicle registration document": "license2.png",
+  "Windscreen (cracks/chips)": "wipes.png",
+  "Wipers and washers": "wipes.png",
+  "Mirrors (rear view/side)": "mirrors2.png",
+  "Lights (head/tail/brake/indicator)": "led.png",
+  "Horn": "hooters.png",
+  "Seat belt": "safety-belt.png",
+  "Seats (condition/adjustment)": "seats.png",
+  "Fire extinguisher (serviced/sealed)": "fire-extinguisher.png",
+  "Warning triangle": "emergency-triangle.png",
+  "Jack and wheel spanner": "wheel-nut.png",
+  "Spare wheel (condition/pressure)": "types-spares.png",
+  "Tyres (condition/pressure/wear)": "types-spares.png",
+  "Brakes (foot/handbrake)": "foot-brake.png",
+  "Steering (play/condition)": "steering-column.png",
+  "Oil level": "oil-fluid-air-level.png",
+  "Coolant level": "radiator.png",
+  "Fuel level": "fuel-oil-levels.png",
+  "Battery (condition/terminals)": "battery.png",
+  "Exhaust system (leaks/condition)": "air-fuel-leaks.png",
+  "Body (dents/damage)": "bonnet-retaining-catch.png",
+  "Doors (locks/handles)": "cabs.png",
+  "General cleanliness": "wipes.png"
+};
 
 // ============================================================================
 // HELPER: Load any image from public/images/ as base64 (server + client)
 // ============================================================================
-async function getImageBase64(filename: string): Promise<string> {
+async function getImageBase64(filename: string): Promise<string | null> {
   try {
     if (typeof window === 'undefined') {
-      // ---------- Server side ----------
       const fs = await import('fs');
       const path = await import('path');
       const imagePath = path.join(process.cwd(), 'public', 'images', filename);
       const imageBuffer = fs.readFileSync(imagePath);
       return `data:image/png;base64,${imageBuffer.toString('base64')}`;
     } else {
-      // ---------- Client side ----------
       const response = await fetch(`/images/${filename}`);
+      if (!response.ok) return null;
       const blob = await response.blob();
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -301,14 +334,14 @@ async function getImageBase64(filename: string): Promise<string> {
     }
   } catch (error) {
     console.error(`Failed to load image ${filename}:`, error);
-    return '';
+    return null;
   }
 }
 
 // ============================================================================
-// FORM LABEL HELPERS (unchanged)
+// FORM LABEL HELPERS
 // ============================================================================
-function formTypeLabel(type: string) {
+function formTypeLabel(type: string): string {
   switch (type) {
     case "light-delivery":
       return "Light Delivery Vehicle Daily Checklist"
@@ -325,7 +358,7 @@ function formTypeLabel(type: string) {
   }
 }
 
-function getDocumentDetails(type: string) {
+function getDocumentDetails(type: string): { ref: string; rev: string; date: string } {
   switch (type) {
     case "light-delivery":
       return { ref: "HSEMS/8.1.19/REG/012", rev: "2", date: "27.03.2020" }
@@ -356,7 +389,7 @@ function formatFieldKey(key: string): string {
 }
 
 // ============================================================================
-// CSV EXPORTS (unchanged)
+// CSV EXPORTS
 // ============================================================================
 function escapeCSV(val: string): string {
   if (val.includes(",") || val.includes('"') || val.includes("\n")) {
@@ -430,7 +463,7 @@ export function exportSingleSubmissionToCSV(sub: Submission): void {
 }
 
 // ============================================================================
-// LOGO LOADER (fixed – uses dynamic import)
+// LOGO LOADER
 // ============================================================================
 async function getLogoBase64(): Promise<string> {
   try {
@@ -442,6 +475,7 @@ async function getLogoBase64(): Promise<string> {
       return `data:image/png;base64,${logoBuffer.toString('base64')}`;
     } else {
       const response = await fetch('/images/ringomode-logo.png');
+      if (!response.ok) return '';
       const blob = await response.blob();
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -457,7 +491,7 @@ async function getLogoBase64(): Promise<string> {
 }
 
 // ============================================================================
-// PDF EXPORT – WITH FULL SECTION GROUPING AND ICONS
+// PDF EXPORT – PER‑ITEM ICONS FOR LIGHT DELIVERY, GROUPED ICONS FOR HARVESTER (NO EMPTY ROWS)
 // ============================================================================
 export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
   const { default: jsPDF } = await import("jspdf")
@@ -465,6 +499,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
   const doc = new jsPDF("p", "mm", "a4")
   const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   
   // ----- LOGO -----
   const logoBase64 = await getLogoBase64();
@@ -561,140 +596,224 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
   }
 
   // ==========================================================================
-  // INSPECTION ITEMS – GROUPED BY SECTION WITH ICONS
+  // INSPECTION ITEMS – HANDLE BY FORM TYPE
   // ==========================================================================
   let y = (doc as any).lastAutoTable?.finalY ?? yOffset + 33
   y += 10
 
-  // Only process if this is an excavator‑harvester submission
-  if (sub.formType === "excavator-harvester") {
+  // Preload icons helper
+  const preloadIcons = async (filenames: string[]): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    const unique = Array.from(new Set(filenames));
+    await Promise.all(unique.map(async (f) => {
+      const base64 = await getImageBase64(f);
+      if (base64) map.set(f, base64);
+    }));
+    return map;
+  };
+
+  if (sub.formType === "light-delivery") {
+    // ----- LIGHT DELIVERY: PER‑ITEM ICONS -----
+    if (!sub.data.items) {
+      console.warn("No inspection items found for light delivery");
+    } else {
+      const items = Object.keys(sub.data.items).sort();
+      
+      const iconFilenames = items
+        .map(item => lightItemIconMap[item])
+        .filter(f => f) as string[];
+      
+      const iconBase64Map = await preloadIcons(iconFilenames);
+
+      const tableRows: any[] = items.map(item => [
+        item,
+        '',
+        statusLabel(sub.data.items[item] as CheckStatus)
+      ]);
+
+      ;(doc as any).autoTable({
+        startY: y,
+        head: [['Inspection Item', '', 'Status']],
+        body: tableRows,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [34, 100, 54],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        styles: {
+          fontSize: 8,
+          cellPadding: 4,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 110, fontStyle: 'bold' },
+          1: { cellWidth: 30, halign: 'center' },
+          2: { cellWidth: 30, halign: 'center' }
+        },
+        margin: { left: 20, right: 20 },
+        didParseCell: (data: Record<string, any>): void => {
+          if (data.section === 'body') {
+            data.cell.minHeight = 20;
+          }
+          if (data.section === 'body' && data.column.index === 2) {
+            const val = data.row.raw[2] as string
+            if (val === 'Defect') {
+              data.cell.styles.textColor = [220, 50, 50]
+              data.cell.styles.fontStyle = 'bold'
+            } else if (val === 'OK') {
+              data.cell.styles.textColor = [34, 139, 34]
+            } else if (val === 'N/A') {
+              data.cell.styles.textColor = [100, 100, 100]
+            }
+          }
+          if (data.section === 'body' && data.column.index === 1) {
+            data.cell.styles.lineWidth = 0;
+          }
+        },
+        didDrawCell: (data: Record<string, any>): void => {
+          if (data.section === 'body' && data.column.index === 1) {
+            const item = data.row.raw[0] as string;
+            const iconFile = lightItemIconMap[item];
+            if (!iconFile) return;
+            const base64 = iconBase64Map.get(iconFile);
+            if (!base64) return;
+
+            try {
+              const cellWidth = data.cell.width;
+              const cellHeight = data.cell.height;
+              const maxImgSize = Math.min(cellWidth, cellHeight) - 4;
+              const imgSize = Math.min(25, maxImgSize);
+              const x = data.cell.x + (cellWidth - imgSize) / 2;
+              const y = data.cell.y + (cellHeight - imgSize) / 2;
+              doc.addImage(base64, 'PNG', x, y, imgSize, imgSize);
+            } catch (e) {
+              console.error(`Failed to draw icon for ${item}`, e);
+            }
+          }
+        }
+      });
+      y = (doc as any).lastAutoTable.finalY + 15;
+    }
+  } else if (sub.formType === "excavator-harvester") {
+    // ----- EXCAVATOR HARVESTER: GROUPED SECTIONS WITH ICON IN THE MIDDLE ROW (NO EMPTY ROWS) -----
     for (const section of sections) {
-      // Find which items of this section are present in the submission
-      const sectionItems = section.items.filter(item => sub.data.items && item in sub.data.items)
+      const sectionItems = section.items.filter((item: string): boolean => 
+        sub.data.items !== undefined && item in sub.data.items
+      )
       if (sectionItems.length === 0) continue
 
-      // Check page break
-      if (y > 250) {
+      if (y > pageHeight - 70) {
         doc.addPage()
         y = 20
       }
 
-      // ----- Section Title -----
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(34, 100, 54)
       doc.text(section.title, 14, y)
       y += 5
 
-      // Split items into two halves
-      const splitIndex = Math.floor(sectionItems.length / 2)
-      const firstHalf = sectionItems.slice(0, splitIndex)
-      const secondHalf = sectionItems.slice(splitIndex)
-
-      // First half items
-      const firstHalfRows = firstHalf.map(item => [
-        item,
-        statusLabel(sub.data.items[item] as CheckStatus)
-      ])
-
-      if (firstHalfRows.length > 0) {
-        ;(doc as any).autoTable({
-          startY: y,
-          body: firstHalfRows,
-          theme: "grid",
-          styles: {
-            fontSize: 8,
-            cellPadding: 2,
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
-          },
-          columnStyles: {
-            0: { cellWidth: 130, fontStyle: 'bold' },
-            1: { cellWidth: 30, halign: 'center' }
-          },
-          margin: { left: 20, right: 20 },
-          didParseCell(data: any) {
-            if (data.section === "body" && data.column.index === 1) {
-              const val = data.row.raw[1]
-              if (val === "Defect") {
-                data.cell.styles.textColor = [220, 50, 50]
-                data.cell.styles.fontStyle = "bold"
-              } else if (val === "OK") {
-                data.cell.styles.textColor = [34, 139, 34]
-              } else if (val === "N/A") {
-                data.cell.styles.textColor = [100, 100, 100]
-              }
-            }
-          },
-          showHead: 'never',
-        })
-        y = (doc as any).lastAutoTable.finalY + 3
-      }
-
-      // ----- Icon (centered, 40×40) -----
+      let iconBase64: string | null = null
       const iconFilename = iconMap[section.title]
       if (iconFilename) {
-        const iconBase64 = await getImageBase64(iconFilename)
-        if (iconBase64) {
-          try {
-            const iconWidth = 40
-            const iconHeight = 40
-            const iconX = (pageWidth - iconWidth) / 2
-            doc.addImage(iconBase64, 'PNG', iconX, y, iconWidth, iconHeight)
-            y += iconHeight + 5
-          } catch (e) {
-            console.error(`Failed to add icon for ${section.title}`, e)
-            y += 5
+        iconBase64 = await getImageBase64(iconFilename)
+      }
+
+      const splitIndex = Math.floor(sectionItems.length / 2)
+      const firstHalf: string[] = sectionItems.slice(0, splitIndex)
+      const secondHalf: string[] = sectionItems.slice(splitIndex)
+
+      // Build table rows: all items in order (no separate icon row)
+      const tableRows: any[] = []
+
+      firstHalf.forEach((item: string): void => {
+        tableRows.push([
+          item,
+          '',
+          statusLabel(sub.data.items?.[item] as CheckStatus)
+        ])
+      })
+
+      secondHalf.forEach((item: string): void => {
+        tableRows.push([
+          item,
+          '',
+          statusLabel(sub.data.items?.[item] as CheckStatus)
+        ])
+      })
+
+      ;(doc as any).autoTable({
+        startY: y,
+        head: [['Inspection Item', '', 'Status']],
+        body: tableRows,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [34, 100, 54],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        styles: {
+          fontSize: 8,
+          cellPadding: 4,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 110, fontStyle: 'bold' },
+          1: { cellWidth: 30, halign: 'center' },
+          2: { cellWidth: 30, halign: 'center' }
+        },
+        margin: { left: 20, right: 20 },
+        didParseCell: (data: Record<string, any>): void => {
+          if (data.section === 'body') {
+            data.cell.minHeight = 20;
           }
-        } else {
-          y += 5
-        }
-      } else {
-        y += 5
-      }
-
-      // ----- Second half items -----
-      const secondHalfRows = secondHalf.map(item => [
-        item,
-        statusLabel(sub.data.items[item] as CheckStatus)
-      ])
-
-      if (secondHalfRows.length > 0) {
-        ;(doc as any).autoTable({
-          startY: y,
-          body: secondHalfRows,
-          theme: "grid",
-          styles: {
-            fontSize: 8,
-            cellPadding: 2,
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
-          },
-          columnStyles: {
-            0: { cellWidth: 130, fontStyle: 'bold' },
-            1: { cellWidth: 30, halign: 'center' }
-          },
-          margin: { left: 20, right: 20 },
-          didParseCell(data: any) {
-            if (data.section === "body" && data.column.index === 1) {
-              const val = data.row.raw[1]
-              if (val === "Defect") {
-                data.cell.styles.textColor = [220, 50, 50]
-                data.cell.styles.fontStyle = "bold"
-              } else if (val === "OK") {
-                data.cell.styles.textColor = [34, 139, 34]
-              } else if (val === "N/A") {
-                data.cell.styles.textColor = [100, 100, 100]
-              }
+          if (data.section === 'body' && data.column.index === 2) {
+            const val = data.row.raw[2] as string
+            if (val === 'Defect') {
+              data.cell.styles.textColor = [220, 50, 50]
+              data.cell.styles.fontStyle = 'bold'
+            } else if (val === 'OK') {
+              data.cell.styles.textColor = [34, 139, 34]
+            } else if (val === 'N/A') {
+              data.cell.styles.textColor = [100, 100, 100]
             }
-          },
-          showHead: 'never',
-        })
-        y = (doc as any).lastAutoTable.finalY + 8
-      }
+          }
+          if (data.section === 'body' && data.column.index === 1) {
+            data.cell.styles.lineWidth = 0;
+          }
+        },
+        didDrawCell: (data: Record<string, any>): void => {
+          // Draw icon in the middle column of the first row of the second half
+          if (
+            data.section === 'body' &&
+            data.column.index === 1 &&
+            data.row.index === firstHalf.length &&
+            iconBase64 !== null
+          ) {
+            try {
+              const cellWidth: number = data.cell.width
+              const cellHeight: number = data.cell.height
+              const maxImgSize = Math.min(cellWidth, cellHeight) - 4;
+              const imgSize = Math.min(25, maxImgSize);
+              const x: number = data.cell.x + (cellWidth - imgSize) / 2
+              const y: number = data.cell.y + (cellHeight - imgSize) / 2
+              doc.addImage(iconBase64, 'PNG', x, y, imgSize, imgSize)
+            } catch (e) {
+              console.error(`Failed to draw icon for ${section.title}`, e)
+            }
+          }
+        }
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 15;
     }
   } else {
-    // ----- Fallback for other form types: flat list -----
+    // ----- FALLBACK FOR OTHER FORM TYPES: FLAT LIST (NO ICONS) -----
     const itemRows: string[][] = []
     if (sub.data.items) {
       for (const [item, status] of Object.entries(sub.data.items)) {
@@ -704,83 +823,87 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
     if (itemRows.length > 0) {
       ;(doc as any).autoTable({
         startY: y,
-        head: [["Inspection Item", "Status"]],
+        head: [['Inspection Item', 'Status']],
         body: itemRows,
-        theme: "grid",
+        theme: 'grid',
         headStyles: {
           fillColor: [34, 100, 54],
           textColor: [255, 255, 255],
-          fontStyle: "bold",
+          fontStyle: 'bold',
           fontSize: 8,
         },
-        bodyStyles: { fontSize: 8 },
-        didParseCell(data: any) {
-          if (data.section === "body" && data.column.index === 1) {
-            const val = data.row.raw[1]
-            if (val === "Defect") {
+        styles: { fontSize: 8, cellPadding: 4 },
+        didParseCell: (data: Record<string, any>): void => {
+          if (data.section === 'body') {
+            data.cell.minHeight = 20;
+          }
+          if (data.section === 'body' && data.column.index === 1) {
+            const val = data.row.raw[1] as string
+            if (val === 'Defect') {
               data.cell.styles.textColor = [220, 50, 50]
-              data.cell.styles.fontStyle = "bold"
-            } else if (val === "OK") {
+              data.cell.styles.fontStyle = 'bold'
+            } else if (val === 'OK') {
               data.cell.styles.textColor = [34, 139, 34]
             }
           }
         },
         margin: { left: 14, right: 14 },
       })
-      y = (doc as any).lastAutoTable.finalY + 8
+      y = (doc as any).lastAutoTable.finalY + 15;
     }
   }
 
   // ----- Defect Details -----
   if (sub.data.defectDetails) {
-    if (y > 260) {
+    y += 5;
+    if (y > pageHeight - 50) {
       doc.addPage()
-      y = 15
+      y = 20
     }
     doc.setFontSize(10)
     doc.setTextColor(220, 50, 50)
     doc.text("Defect Details:", 14, y)
-    y += 5
+    y += 7
     doc.setFontSize(8)
     doc.setTextColor(60)
-    const lines = doc.splitTextToSize(sub.data.defectDetails, pageWidth - 28)
+    const lines: string[] = doc.splitTextToSize(sub.data.defectDetails as string, pageWidth - 28)
     doc.text(lines, 14, y)
-    y += lines.length * 4 + 6
+    y += lines.length * 5 + 10
   }
 
   // ----- Signature -----
-  if (y > 270) {
+  if (y > pageHeight - 40) {
     doc.addPage()
-    y = 15
+    y = 20
   }
   doc.setFontSize(10)
   doc.setTextColor(60)
   doc.text("Signature:", 14, y)
-  y += 5
+  y += 8
 
   const signature = sub.data.signature
   if (signature && typeof signature === 'string' && signature.startsWith('data:image')) {
     try {
       doc.addImage(signature, 'PNG', 14, y - 3, 50, 15)
-      y += 15
+      y += 20
     } catch (error) {
       console.error('Failed to add signature image, falling back to text', error)
       doc.setFontSize(9)
       doc.setFont("helvetica", "italic")
       doc.text("[Signature image failed to load]", 14, y)
       doc.setFont("helvetica", "normal")
-      y += 5
+      y += 8
     }
   } else {
     doc.setFontSize(9)
     doc.setFont("helvetica", "italic")
-    doc.text(signature || "-", 14, y)
+    doc.text(signature as string || "-", 14, y)
     doc.setFont("helvetica", "normal")
-    y += 5
+    y += 8
   }
 
   // ----- Footer -----
-  const pageCount = doc.getNumberOfPages()
+  const pageCount: number = doc.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
     doc.setFontSize(7)
@@ -793,12 +916,12 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
     )
   }
 
-  const filename = `ringomode-${sub.formType}-${sub.submittedBy.replace(/\s/g, "_")}-${sub.id.slice(0, 8)}.pdf`
+  const filename: string = `ringomode-${sub.formType}-${sub.submittedBy.replace(/\s/g, "_")}-${sub.id.slice(0, 8)}.pdf`
   doc.save(filename)
 }
 
 // ============================================================================
-// DOWNLOAD HELPER (unchanged)
+// DOWNLOAD HELPER
 // ============================================================================
 function downloadFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType })

@@ -7,10 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { 
   Truck, 
-  Tractor, 
   TreePine, 
-  Container, 
-  Wrench, 
   ArrowRight, 
   ClipboardList
 } from "lucide-react"
@@ -27,16 +24,6 @@ const forms = [
     itemCount: 26,
   },
   {
-    id: "excavator-loader",
-    title: "Excavator Loader",
-    subtitle: "Pre-Shift Inspection",
-    description: "Comprehensive pre-shift inspection for excavator loaders covering hydraulics, tracks, controls, and safety systems.",
-    icon: Tractor,
-    href: "/excavator-loader",
-    docRef: "HSEMS/8.1.19/REG/002",
-    itemCount: 33,
-  },
-  {
     id: "excavator-harvester",
     title: "Excavator Harvester",
     subtitle: "Pre-Shift Inspection",
@@ -45,26 +32,6 @@ const forms = [
     href: "/excavator-harvester",
     docRef: "HSEMS/8.1.19/REG/001",
     itemCount: 36,
-  },
-  {
-    id: "lowbed-trailer",
-    title: "Lowbed & Roll Back Trailer",
-    subtitle: "Pre-Shift Inspection",
-    description: "Complete inspection for lowbed and roll back trailers including deck condition, hydraulics, winch, tyres, and coupling systems.",
-    icon: Container,
-    href: "/lowbed-trailer",
-    docRef: "HSEMS/8.1.19/REG/020",
-    itemCount: 29,
-  },
-  {
-    id: "mechanic-ldv",
-    title: "Mechanic LDV",
-    subtitle: "Daily Checklist",
-    description: "Specialized daily inspection for mechanic light delivery vehicles covering tools, equipment, and vehicle systems.",
-    icon: Wrench,
-    href: "/mechanic-ldv",
-    docRef: "HSEMS/8.1.19/REG/017",
-    itemCount: 24,
   },
 ]
 
@@ -99,7 +66,7 @@ export function UserHomePage() {
         </div>
 
         {/* Form Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
           {forms.map((form) => {
             const Icon = form.icon
             return (
@@ -139,26 +106,14 @@ export function UserHomePage() {
         </div>
 
         {/* Quick Stats Row */}
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <div className="mt-8 grid grid-cols-2 gap-4">
           <div className="rounded-lg bg-blue-50 p-3 text-center">
             <p className="text-xs font-medium text-blue-700">Light Delivery</p>
             <p className="text-lg font-bold text-blue-800">26 items</p>
           </div>
-          <div className="rounded-lg bg-orange-50 p-3 text-center">
-            <p className="text-xs font-medium text-orange-700">Excavator Loader</p>
-            <p className="text-lg font-bold text-orange-800">33 items</p>
-          </div>
           <div className="rounded-lg bg-green-50 p-3 text-center">
             <p className="text-xs font-medium text-green-700">Excavator Harvester</p>
             <p className="text-lg font-bold text-green-800">36 items</p>
-          </div>
-          <div className="rounded-lg bg-purple-50 p-3 text-center">
-            <p className="text-xs font-medium text-purple-700">Lowbed Trailer</p>
-            <p className="text-lg font-bold text-purple-800">29 items</p>
-          </div>
-          <div className="rounded-lg bg-red-50 p-3 text-center">
-            <p className="text-xs font-medium text-red-700">Mechanic LDV</p>
-            <p className="text-lg font-bold text-red-800">24 items</p>
           </div>
         </div>
 

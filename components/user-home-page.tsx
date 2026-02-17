@@ -2,7 +2,6 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { 
@@ -17,9 +16,9 @@ import {
   Fuel,
   FileText,
   Droplets,
-  ClipboardCheck,  // for Weekly Machinery and Daily Machine
+  ClipboardCheck,
   ArrowRight, 
-  ClipboardList   // for Daily Attachment
+  ClipboardList
 } from "lucide-react"
 
 const forms = [
@@ -230,8 +229,6 @@ const forms = [
 export function UserHomePage() {
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader role="user" />
-
       <main className="mx-auto max-w-7xl p-4 lg:p-8">
         {/* Hero Section */}
         <div className="mb-8 flex flex-col items-center text-center">

@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { ClipboardList, LayoutDashboard, LogOut, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,16 @@ interface SiteHeaderProps {
 
 export function SiteHeader({ role }: SiteHeaderProps) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" })
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card">
@@ -78,7 +88,12 @@ export function SiteHeader({ role }: SiteHeaderProps) {
             </Link>
           </Button>
 
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground"
+            onClick={handleLogout}
+          >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Sign Out</span>
           </Button>
@@ -87,4 +102,3 @@ export function SiteHeader({ role }: SiteHeaderProps) {
     </header>
   )
 }
-

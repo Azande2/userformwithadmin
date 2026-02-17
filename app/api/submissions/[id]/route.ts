@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
-import { addSubmission, getSubmissions } from "@/lib/submissions"; // ✅ MUST be the same
+import { addSubmission, getSubmissions } from "@/lib/submissions";
 import type { Submission } from "@/lib/types";
 
 export async function GET() {
-  const submissions = getSubmissions();
-  return NextResponse.json(submissions);
+  try {
+    const submissions = await getSubmissions();
+    return NextResponse.json(submissions);
+  } catch (error) {
+    console.error("Failed to fetch submissions:", error);
+    return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -21,7 +26,7 @@ export async function POST(request: Request) {
       hasDefects: body.hasDefects || false,
     };
 
-    addSubmission(submission); // ✅ This adds to the SAME array
+    await addSubmission(submission);
 
     return NextResponse.json({ success: true, id: submission.id }, { status: 201 });
   } catch (error) {

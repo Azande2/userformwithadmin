@@ -51,6 +51,13 @@ import {
   Trees,
   Container,
   Wrench,
+  Bus,
+  Combine,
+  Logs,
+  Fuel,
+    Tractor,
+  Droplets,
+  ClipboardCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -75,7 +82,7 @@ function StatusBadge({ status }: { status: CheckStatus }) {
   return <Badge className={config.className}>{config.label}</Badge>
 }
 
-// ✅ UPDATED: Added new form types
+// ✅ UPDATED: Added all new form types
 function formTypeLabel(type: string) {
   switch (type) {
     case "light-delivery":
@@ -88,12 +95,42 @@ function formTypeLabel(type: string) {
       return "Lowbed & Roll Back Trailer"
     case "mechanic-ldv":
       return "Mechanic LDV"
+    case "personal-labour-carrier":
+      return "Personal / Labour Carrier"
+    case "ponsse-bison":
+      return "Ponsse Bison"
+    case "self-loading-forwarder":
+      return "Self Loading Forwarder"
+    case "skidder":
+      return "Skidder (Grapple & Cable)"
+    case "timber-truck-trailer":
+      return "Timber Truck And Trailer"
+    case "trailer":
+      return "Trailer (Excluding Labour)"
+    case "service-diesel-truck":
+      return "Service/Diesel Truck"
+    case "vehicle-job-card":
+      return "Motorised Equipment/Vehicle Job Card"
+    case "water-cart-trailer":
+      return "Water Cart Trailer & Pressure Washer"
+    case "weekly-machinery-condition":
+      return "Weekly Machinery Condition Assessment"
+    case "bell-timber-truck":
+      return "Bell Timber Truck"
+    case "daily-attachment-checklist":
+      return "Daily Attachment Checklist"
+    case "daily-machine-checklist":
+      return "Daily Machine Checklist"
+    case "dezzi-timber-truck":
+      return "Dezzi Timber Truck"
+    case "diesel-cart-trailer":
+      return "Diesel Cart Trailer"
     default:
       return type
   }
 }
 
-// ✅ ADDED: Form icon mapping
+// ✅ ADDED: Form icon mapping with all icons
 function getFormIcon(type: string) {
   switch (type) {
     case "light-delivery":
@@ -106,6 +143,36 @@ function getFormIcon(type: string) {
       return <Container className="h-4 w-4 text-muted-foreground" />
     case "mechanic-ldv":
       return <Wrench className="h-4 w-4 text-muted-foreground" />
+    case "personal-labour-carrier":
+      return <Bus className="h-4 w-4 text-muted-foreground" />
+    case "ponsse-bison":
+      return <Combine className="h-4 w-4 text-muted-foreground" />
+    case "self-loading-forwarder":
+      return <Tractor className="h-4 w-4 text-muted-foreground" />
+    case "skidder":
+      return <Logs className="h-4 w-4 text-muted-foreground" />
+    case "timber-truck-trailer":
+      return <Truck className="h-4 w-4 text-muted-foreground" />
+    case "trailer":
+      return <Container className="h-4 w-4 text-muted-foreground" />
+    case "service-diesel-truck":
+      return <Fuel className="h-4 w-4 text-muted-foreground" />
+    case "vehicle-job-card":
+      return <FileText className="h-4 w-4 text-muted-foreground" />
+    case "water-cart-trailer":
+      return <Droplets className="h-4 w-4 text-muted-foreground" />
+    case "weekly-machinery-condition":
+      return <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+    case "bell-timber-truck":
+      return <Combine className="h-4 w-4 text-muted-foreground" />
+    case "daily-attachment-checklist":
+      return <ClipboardList className="h-4 w-4 text-muted-foreground" />
+    case "daily-machine-checklist":
+      return <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+    case "dezzi-timber-truck":
+      return <Truck className="h-4 w-4 text-muted-foreground" />
+    case "diesel-cart-trailer":
+      return <Container className="h-4 w-4 text-muted-foreground" />
     default:
       return <FileText className="h-4 w-4 text-muted-foreground" />
   }
@@ -252,10 +319,14 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
   )
 }
 
-// Main Dashboard
-export function AdminDashboard() {
-  const [submissions, setSubmissions] = useState<Submission[]>([])
-  const [loading, setLoading] = useState(true)
+// Main Dashboard – accepts initialSubmissions prop
+interface AdminDashboardProps {
+  initialSubmissions?: Submission[];
+}
+
+export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps) {
+  const [submissions, setSubmissions] = useState<Submission[]>(initialSubmissions)
+  const [loading, setLoading] = useState(false) // start false if we have initial data? but we'll still fetch on mount for updates
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [defectFilter, setDefectFilter] = useState<string>("all")
@@ -271,7 +342,11 @@ export function AdminDashboard() {
     try {
       const res = await fetch("/api/submissions")
       const data = await res.json()
-      setSubmissions(data)
+      if (Array.isArray(data)) {
+        setSubmissions(data)
+      } else {
+        console.error("Expected array but got:", data)
+      }
     } catch {
       console.error("Failed to fetch submissions")
     } finally {
@@ -527,9 +602,23 @@ export function AdminDashboard() {
                 <SelectItem value="light-delivery">Light Delivery</SelectItem>
                 <SelectItem value="excavator-loader">Excavator Loader</SelectItem>
                 <SelectItem value="excavator-harvester">Excavator Harvester</SelectItem>
-                {/* ✅ ADDED: New form types */}
                 <SelectItem value="lowbed-trailer">Lowbed & Roll Back</SelectItem>
                 <SelectItem value="mechanic-ldv">Mechanic LDV</SelectItem>
+                <SelectItem value="personal-labour-carrier">Labour Carrier</SelectItem>
+                <SelectItem value="ponsse-bison">Ponsse Bison</SelectItem>
+                <SelectItem value="self-loading-forwarder">Self Loading Forwarder</SelectItem>
+                <SelectItem value="skidder">Skidder</SelectItem>
+                <SelectItem value="timber-truck-trailer">Timber Truck</SelectItem>
+                <SelectItem value="trailer">Trailer</SelectItem>
+                <SelectItem value="service-diesel-truck">Service Diesel</SelectItem>
+                <SelectItem value="vehicle-job-card">Job Card</SelectItem>
+                <SelectItem value="water-cart-trailer">Water Cart</SelectItem>
+                <SelectItem value="weekly-machinery-condition">Weekly Machinery</SelectItem>
+                <SelectItem value="bell-timber-truck">Bell Timber</SelectItem>
+                <SelectItem value="daily-attachment-checklist">Daily Attachment</SelectItem>
+                <SelectItem value="daily-machine-checklist">Daily Machine</SelectItem>
+                <SelectItem value="dezzi-timber-truck">Dezzi Timber</SelectItem>
+                <SelectItem value="diesel-cart-trailer">Diesel Cart</SelectItem>
               </SelectContent>
             </Select>
             <Select value={defectFilter} onValueChange={setDefectFilter}>

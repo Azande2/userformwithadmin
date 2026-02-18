@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { addSubmission, getSubmissions } from "@/lib/submissions";
 import type { Submission } from "@/lib/types";
 
+// Allowed brand values
+const allowedBrands = ['ringomode', 'cintasign'] as const;
+
 export async function GET() {
   try {
     const submissions = await getSubmissions();
@@ -21,12 +24,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     
     // Get brand from request body first, then cookie, fallback to 'ringomode'
-    // (cookies() is async in Next.js 15)
     const cookieStore = await cookies();
-    const brandCookie = cookieStore.get('brand');
+    const brandCookie = cookieStore.get('brand')?.value;
     
-    // ✅ Use the brand sent by the client if present, otherwise fallback to cookie/default
-    const brand = body.brand || (brandCookie?.value as 'ringomode' | 'cintasign') || 'ringomode';
+    // Determine brand and validate
+    let brand = body.brand || brandCookie || 'ringomode';
+    if (!allowedBrands.includes(brand as any)) {
+      brand = 'ringomode'; // fallback if invalid value
+    }
 
     // Validate required fields
     if (!body.formType || !body.formTitle || !body.submittedBy) {
@@ -37,14 +42,14 @@ export async function POST(request: Request) {
     }
 
     const submission: Submission = {
-      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       formType: body.formType,
       formTitle: body.formTitle,
       submittedBy: body.submittedBy,
       submittedAt: new Date().toISOString(),
       data: body.data || {},
       hasDefects: body.hasDefects || false,
-      brand, // ✅ now correctly uses the brand from the request body
+      brand: brand as 'ringomode' | 'cintasign', // safe after validation
     };
 
     await addSubmission(submission);

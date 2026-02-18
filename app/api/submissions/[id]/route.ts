@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { cookies } from 'next/headers';
 import { addSubmission, getSubmissions } from "@/lib/submissions";
 import type { Submission } from "@/lib/types";
+import { deleteSubmission } from '@/lib/submissions';
+
+// Allowed brand values
+const ALLOWED_BRANDS = ['ringomode', 'cintasign'] as const;
 
 export async function GET() {
   try {
@@ -16,6 +20,23 @@ export async function GET() {
   }
 }
 
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { id } = params;
+    await deleteSubmission(id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/submissions/[id] error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete submission' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -24,8 +45,12 @@ export async function POST(request: Request) {
     const cookieStore = await cookies(); // await because cookies() is async in Next.js 15
     const brandCookie = cookieStore.get('brand')?.value;
     
-    // Prioritize body.brand over cookie, fallback to 'ringomode'
-    const brand = body.brand || brandCookie || 'ringomode';
+    // Determine brand and validate
+    let brand = body.brand || brandCookie || 'ringomode';
+    // Ensure brand is one of the allowed values
+    if (!ALLOWED_BRANDS.includes(brand as any)) {
+      brand = 'ringomode';
+    }
 
     // Validate required fields
     if (!body.formType || !body.formTitle || !body.submittedBy) {
@@ -35,15 +60,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Ensure data is an object
+    const data = typeof body.data === 'object' && body.data !== null ? body.data : {};
+
     const submission: Submission = {
-      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       formType: body.formType,
       formTitle: body.formTitle,
       submittedBy: body.submittedBy,
       submittedAt: new Date().toISOString(),
-      data: body.data || {},
+      data,
       hasDefects: body.hasDefects || false,
-      brand, // store the correct brand
+      brand: brand as 'ringomode' | 'cintasign', // safe after validation
     };
 
     await addSubmission(submission);

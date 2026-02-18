@@ -20,8 +20,6 @@ async function getAllSubmissions(): Promise<Submission[]> {
   return submissions.filter((s): s is Submission => s !== null);
 }
 
-// Initialize – no persistent in‑memory array needed.
-
 export async function getSubmissions(): Promise<Submission[]> {
   return getAllSubmissions();
 }
@@ -245,6 +243,7 @@ export async function getSubmissionsCount(): Promise<number> {
   return await kv.zcard(SUBMISSIONS_KEY);
 }
 
+// ✅ DELETE FUNCTION – this is what you need
 export async function deleteSubmission(id: string): Promise<boolean> {
   const existed = await kv.del(`submission:${id}`);
   await kv.zrem(SUBMISSIONS_KEY, id);

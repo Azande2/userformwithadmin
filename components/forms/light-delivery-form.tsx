@@ -10,19 +10,14 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { lightDeliveryItems, type CheckStatus } from "@/lib/types"
+import { type CheckStatus } from "@/lib/types"
 import { AlertTriangle, CheckCircle2, Send, ArrowLeft, AlertCircle, Eraser } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { BrandLogo } from '@/components/brand-logo';
 
 // ============================================================================
-// EFFECTIVE ITEMS – remove "First aid kit" from the list
-// ============================================================================
-const effectiveItems = lightDeliveryItems.filter(item => item !== "First aid kit")
-
-// ============================================================================
-// ICON MAPPING – per‑item icons (used for non‑group sections)
+// ICON MAPPING – this is the source of truth for all items
 // ============================================================================
 const itemIconMap: Record<string, string> = {
   "Drivers license available": "license2.png",
@@ -53,7 +48,7 @@ const itemIconMap: Record<string, string> = {
 }
 
 // ============================================================================
-// SECTION DEFINITIONS – each section has a title, list of items, and optional groupIcon
+// SECTION DEFINITIONS – now using the exact strings from itemIconMap
 // ============================================================================
 interface Section {
   title: string
@@ -132,7 +127,12 @@ const sections: Section[] = [
 ]
 
 // ============================================================================
-// PER‑ITEM ROW COMPONENT
+// Flatten all items from sections to get the total list
+// ============================================================================
+const allItems = sections.flatMap(section => section.items)
+
+// ============================================================================
+// PER‑ITEM ROW COMPONENT (unchanged)
 // ============================================================================
 interface ItemRowProps {
   item: string
@@ -192,7 +192,7 @@ function ItemRow({ item, value, onChange, iconSrc }: ItemRowProps) {
 }
 
 // ============================================================================
-// GROUP SECTION COMPONENT
+// GROUP SECTION COMPONENT (unchanged)
 // ============================================================================
 interface GroupSectionProps {
   title: string
@@ -318,8 +318,9 @@ export function LightDeliveryForm() {
     return `LD-${year}${month}${day}-${random}`
   }, [])
 
+  // ✅ Initialise state with the exact strings from sections (or from itemIconMap)
   const [items, setItems] = useState<Record<string, CheckStatus>>(
-    Object.fromEntries(effectiveItems.map((item) => [item, null]))
+    Object.fromEntries(allItems.map((item) => [item, null]))
   )
 
   const [defectDetails, setDefectDetails] = useState("")
@@ -440,7 +441,6 @@ export function LightDeliveryForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // --- Validation (unchanged) ---
     if (!formData.driverName || !formData.vehicleRegistration) {
       toast.error("Please fill in all required fields")
       return
@@ -461,11 +461,8 @@ export function LightDeliveryForm() {
       return
     }
 
-    // --- Brand handling ---
     const brand = Cookies.get('brand') as 'ringomode' | 'cintasign' || 'ringomode';
 
-    // Optional: verify that the session brand matches the cookie brand
-    // (This requires an endpoint like /api/user that returns the current user's brand)
     try {
       const userRes = await fetch('/api/user');
       if (userRes.ok) {
@@ -476,7 +473,6 @@ export function LightDeliveryForm() {
         }
       }
     } catch (error) {
-      // If the endpoint doesn't exist, just log and continue
       console.warn("Could not verify session brand – assuming it's correct.", error);
     }
 
@@ -492,7 +488,7 @@ export function LightDeliveryForm() {
           formTitle: "Light Delivery Vehicle Daily Checklist",
           submittedBy: formData.driverName,
           hasDefects,
-          brand, // explicitly send the brand from cookie
+          brand,
           data: {
             ...formData,
             documentNo,
@@ -520,7 +516,6 @@ export function LightDeliveryForm() {
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-6 p-4 pb-12 lg:p-8 lg:pb-16">
-      {/* … the rest of your JSX remains exactly as before … */}
       <div className="flex items-center gap-3">
         <Button type="button" variant="ghost" size="sm" asChild className="gap-2 text-muted-foreground">
           <Link href="/">
@@ -685,7 +680,7 @@ export function LightDeliveryForm() {
 
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">
-          Progress: {checkedCount} / {effectiveItems.length} items checked
+          Progress: {checkedCount} / {allItems.length} items checked
         </span>
         {allItemsChecked && (
           <span className="flex items-center gap-1 text-[hsl(142,76%,36%)]">
@@ -697,7 +692,7 @@ export function LightDeliveryForm() {
       <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${(checkedCount / effectiveItems.length) * 100}%` }}
+          style={{ width: `${(checkedCount / allItems.length) * 100}%` }}
         />
       </div>
 

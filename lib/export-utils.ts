@@ -1276,7 +1276,9 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
         key === "labour" ||
         key === "partsTotal" ||
         key === "labourTotal" ||
-        key === "grandTotal"
+        key === "grandTotal" ||
+        key === "fleetEntries" ||      // 👈 exclude arrays to avoid [object Object]
+        key === "breakdownEntries"
       ) continue
       fieldRows.push([formatFieldKey(key), String(value) || "-"])
     }

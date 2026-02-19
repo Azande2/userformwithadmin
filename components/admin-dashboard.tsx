@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Submission, CheckStatus } from "@/lib/types"
 import {
   exportSubmissionsToCSV,
@@ -57,9 +57,29 @@ import {
   Tractor,
   Droplets,
   ClipboardCheck,
-  Trash2, // ✅ Added for delete
+  Trash2,
+  BarChart3,
+  PieChart,
+  TrendingUp,
 } from "lucide-react"
 import { toast } from "sonner"
+
+// ============================================================================
+// Recharts imports
+// ============================================================================
+import {
+  BarChart,
+  Bar,
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts"
 
 // ============================================================================
 // TYPE GUARDS
@@ -97,7 +117,7 @@ function StatusBadge({ status }: { status: CheckStatus }) {
 
 // Brand badge helper
 function BrandBadge({ brand }: { brand?: string }) {
-  const displayBrand = brand || 'ringomode'; // fallback for old submissions
+  const displayBrand = brand || 'ringomode';
   const isCintasign = displayBrand === 'cintasign';
   return (
     <Badge variant="outline" className={isCintasign ? "border-blue-500 text-blue-700" : "border-gray-500 text-gray-700"}>
@@ -106,7 +126,7 @@ function BrandBadge({ brand }: { brand?: string }) {
   );
 }
 
-// Form type label (updated to include cintasign-shorthaul)
+// Form type label
 function formTypeLabel(type: string) {
   switch (type) {
     case "light-delivery":
@@ -156,7 +176,7 @@ function formTypeLabel(type: string) {
   }
 }
 
-// Form icon mapping (updated for cintasign-shorthaul)
+// Form icon mapping
 function getFormIcon(type: string) {
   switch (type) {
     case "light-delivery":
@@ -213,17 +233,271 @@ function formatFieldKey(key: string): string {
     .trim()
 }
 
-// Preview Component – with type guards
+// ============================================================================
+// REPORTS COMPONENT – all charts live here (with all 21 form types)
+// ============================================================================
+function AdminReports({ submissions }: { submissions: Submission[] }) {
+  const [dateRange, setDateRange] = useState<"7" | "30" | "all">("30");
+
+  // Filter submissions by date range
+  const filteredSubs = useMemo(() => {
+    if (dateRange === "all") return submissions;
+    const days = parseInt(dateRange);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    return submissions.filter(s => new Date(s.submittedAt) >= cutoff);
+  }, [submissions, dateRange]);
+
+  // 1. Daily submissions
+  const dailyData = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredSubs.forEach(sub => {
+      const date = new Date(sub.submittedAt).toLocaleDateString("en-ZA");
+      map.set(date, (map.get(date) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [filteredSubs]);
+
+  // 2. Defect vs Clean
+  const defectCleanData = useMemo(() => {
+    const defect = filteredSubs.filter(s => s.hasDefects).length;
+    const clean = filteredSubs.filter(s => !s.hasDefects).length;
+    return [
+      { name: "Clean", value: clean, color: "#22c55e" },
+      { name: "Defect", value: defect, color: "#ef4444" },
+    ];
+  }, [filteredSubs]);
+
+  // 3. Form type distribution – ALL forms (21)
+  const formTypeData = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredSubs.forEach(sub => {
+      const label = formTypeLabel(sub.formType);
+      map.set(label, (map.get(label) || 0) + 1);
+    });
+    // Convert to array and sort alphabetically
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredSubs]);
+
+  // 4. Brand distribution
+  const brandData = useMemo(() => {
+    const ringo = filteredSubs.filter(s => (s.brand || 'ringomode') === 'ringomode').length;
+    const cinta = filteredSubs.filter(s => s.brand === 'cintasign').length;
+    return [
+      { name: "Ringomode DSP", value: ringo, color: "#3b82f6" },
+      { name: "Cintasign", value: cinta, color: "#f59e0b" },
+    ];
+  }, [filteredSubs]);
+
+  // Colors for form type chart (21 distinct colors)
+  const formColors = [
+    "#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#a4de6c",
+    "#d0ed57", "#8dd1e1", "#b0e57c", "#f5b7b1", "#d7bde2",
+    "#f7dc6f", "#85c1e9", "#f5cba0", "#c39bd3", "#76d7c4",
+    "#ec7063", "#f8c471", "#f0b27a", "#a569bd", "#5dade2",
+    "#48c9b0"
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Date Range Selector */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium">Date Range:</span>
+        <Select value={dateRange} onValueChange={(v) => setDateRange(v as any)}>
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Last 7 days</SelectItem>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Stats summary */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{filteredSubs.length}</div>
+            <p className="text-xs text-muted-foreground">Total Submissions</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{defectCleanData[0].value}</div>
+            <p className="text-xs text-muted-foreground">Clean Inspections</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{defectCleanData[1].value}</div>
+            <p className="text-xs text-muted-foreground">With Defects</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{brandData.find(b => b.name === "Cintasign")?.value || 0}</div>
+            <p className="text-xs text-muted-foreground">Cintasign Submissions</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Daily Submissions */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Calendar className="h-4 w-4" />
+              Submissions per Day
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" angle={-45} textAnchor="end" height={60} interval={0} tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="count" fill="#3b82f6" name="Submissions" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Defect vs Clean Pie */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PieChart className="h-4 w-4" />
+              Defect vs Clean
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <RePieChart>
+                <Pie
+                  data={defectCleanData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {defectCleanData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </RePieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* All Form Types – now includes ALL 21 forms */}
+        <Card className="lg:col-span-2"> {/* Full width on large screens */}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4" />
+              All Form Types (21)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[500px]"> {/* Increased height for 21 items */}
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={formTypeData}
+                layout="vertical"
+                margin={{ left: 200, right: 20, top: 20, bottom: 20 }} // More left space
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={180} // Wide enough for long names
+                  tick={{ fontSize: 10 }}
+                  interval={0} // Show all labels
+                />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="value" fill="#82ca9d" name="Count">
+                  {formTypeData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={formColors[index % formColors.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Brand Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="h-4 w-4" />
+              Brand Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <RePieChart>
+                <Pie
+                  data={brandData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {brandData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </RePieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Legend / Color Key */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-3 text-xs text-muted-foreground">
+          <p><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> Clean – No defects found.</p>
+          <p><span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-1"></span> Defect – At least one defect reported.</p>
+          <p><span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1"></span> Ringomode DSP – Submissions from Ringomode brand.</p>
+          <p><span className="inline-block w-3 h-3 bg-amber-500 rounded-full mr-1"></span> Cintasign – Submissions from Cintasign brand.</p>
+          <p>Hover over any chart segment to see exact numbers.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================================
+// PREVIEW COMPONENT (unchanged)
+// ============================================================================
 function SubmissionPreview({ submission }: { submission: Submission }) {
   const logoPath = submission.brand === 'cintasign' 
     ? '/images/cintasign-logo.jpg' 
     : '/images/ringomode-logo.png';
   const logoAlt = submission.brand === 'cintasign' ? 'Cintasign Logo' : 'Ringomode DSP Logo';
 
-  // Helper to render fleet entries if present (specific to cintasign-shorthaul)
   const renderFleetEntries = () => {
     if (submission.formType !== 'cintasign-shorthaul') return null;
-    const data = submission.data as any; // we know it's the shorthaul type
+    const data = submission.data as any;
     if (!data.fleetEntries || data.fleetEntries.length === 0) return null;
     return (
       <Card>
@@ -313,7 +587,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
 
   return (
     <div className="space-y-6 print:space-y-4" id="submission-preview">
-      {/* Print Header with dynamic logo */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <Image
@@ -340,7 +613,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
 
       <Separator />
 
-      {/* Title + Status */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-foreground">{submission.formTitle}</h2>
         {submission.hasDefects ? (
@@ -350,7 +622,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
         )}
       </div>
 
-      {/* Form Fields – always show basic fields */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-foreground">Form Information</CardTitle>
@@ -383,7 +654,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
         </CardContent>
       </Card>
 
-      {/* Conditional rendering based on form type */}
       {submission.formType === "cintasign-shorthaul" ? (
         <>
           {renderFleetEntries()}
@@ -391,7 +661,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
         </>
       ) : (
         <>
-          {/* Inspection Items – only if data has items */}
           {hasItems(submission.data) && (
             <Card>
               <CardHeader className="pb-3">
@@ -421,7 +690,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
             </Card>
           )}
 
-          {/* Defect Details – only if data has defectDetails */}
           {hasDefectDetails(submission.data) && submission.data.defectDetails && (
             <Card className="border-destructive/30 bg-destructive/5">
               <CardHeader className="pb-3">
@@ -436,7 +704,6 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
             </Card>
           )}
 
-          {/* Signature – only if data has signature */}
           {hasSignature(submission.data) && submission.data.signature && (
             <Card>
               <CardHeader className="pb-3">
@@ -457,7 +724,9 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
   )
 }
 
-// Main Dashboard
+// ============================================================================
+// MAIN DASHBOARD – with tabs (Submissions / Analytics)
+// ============================================================================
 interface AdminDashboardProps {
   initialSubmissions?: Submission[];
 }
@@ -470,10 +739,7 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
   const [defectFilter, setDefectFilter] = useState<string>("all")
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [dialogTab, setDialogTab] = useState<string>("preview")
-
-  // Notification states
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [notifications, setNotifications] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<string>("submissions") // "submissions" or "analytics"
 
   const fetchSubmissions = useCallback(async () => {
     setLoading(true)
@@ -492,75 +758,9 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
     }
   }, [])
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications")
-      const data = await res.json()
-      setNotifications(data.notifications || [])
-      setUnreadCount(data.unreadCount || 0)
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error)
-    }
-  }, [])
-
-  const markAsRead = async (submissionId: string) => {
-    try {
-      await fetch("/api/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId }),
-      })
-      
-      setNotifications(prev => prev.filter(n => n.id !== submissionId))
-      setUnreadCount(prev => Math.max(0, prev - 1))
-      
-      setSubmissions(prev =>
-        prev.map(sub =>
-          sub.id === submissionId ? { ...sub, isRead: true } : sub
-        )
-      )
-      
-      toast.success("Marked as read")
-    } catch (error) {
-      toast.error("Failed to mark as read")
-    }
-  }
-
-  // ✅ Delete function
-  const handleDelete = async (submissionId: string) => {
-    // Confirm deletion
-    if (!window.confirm("Are you sure you want to delete this submission? This action cannot be undone.")) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/submissions/${submissionId}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to delete");
-      }
-
-      // Remove from local state
-      setSubmissions(prev => prev.filter(s => s.id !== submissionId));
-      toast.success("Submission deleted successfully");
-    } catch (error) {
-      toast.error("Failed to delete submission");
-    }
-  };
-
   useEffect(() => {
     fetchSubmissions()
-    fetchNotifications()
-    
-    const interval = setInterval(() => {
-      fetchNotifications()
-      fetchSubmissions()
-    }, 10000)
-    
-    return () => clearInterval(interval)
-  }, [fetchSubmissions, fetchNotifications])
+  }, [fetchSubmissions])
 
   const filtered = submissions.filter((s) => {
     const matchesSearch =
@@ -608,6 +808,24 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
     window.print()
   }
 
+  const handleDelete = async (submissionId: string) => {
+    if (!window.confirm("Are you sure you want to delete this submission? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete");
+      }
+      setSubmissions(prev => prev.filter(s => s.id !== submissionId));
+      toast.success("Submission deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete submission");
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 lg:p-8">
       {/* Header */}
@@ -619,50 +837,6 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Notification Bell */}
-          <div className="relative">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 bg-transparent relative"
-              onClick={() => {
-                if (notifications.length > 0) {
-                  const first = notifications[0]
-                  toast.info(
-                    <div className="flex flex-col gap-1">
-                      <p className="font-semibold">{first.title}</p>
-                      <p className="text-sm">{first.message}</p>
-                      <Button 
-                        size="sm" 
-                        className="mt-2 w-full"
-                        onClick={() => {
-                          markAsRead(first.id)
-                          const sub = submissions.find(s => s.id === first.id)
-                          if (sub) {
-                            setSelectedSubmission(sub)
-                            setDialogTab("preview")
-                          }
-                        }}
-                      >
-                        View Submission
-                      </Button>
-                    </div>
-                  )
-                }
-              }}
-            >
-              <span className="relative">
-                🔔
-                {unreadCount > 0 && (
-                  <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </span>
-              <span className="hidden sm:inline">Notifications</span>
-            </Button>
-          </div>
-          
           <Button
             variant="outline"
             size="sm"
@@ -676,280 +850,281 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 pt-6">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <ClipboardList className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground">{totalSubmissions}</div>
-              <div className="text-xs text-muted-foreground">Total Submissions</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 pt-6">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground">{defectCount}</div>
-              <div className="text-xs text-muted-foreground">With Defects</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 pt-6">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[hsl(142,76%,36%)]/10">
-              <CheckCircle2 className="h-5 w-5 text-[hsl(142,76%,36%)]" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground">{cleanCount}</div>
-              <div className="text-xs text-muted-foreground">Clean Inspections</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 pt-6">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-foreground">{todayCount}</div>
-              <div className="text-xs text-muted-foreground">Today</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="submissions" className="gap-2">
+            <ClipboardList className="h-4 w-4" />
+            Submissions
+          </TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Submissions Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base text-foreground">Submissions</CardTitle>
-          <CardDescription>
-            Filter and review all submitted inspection checklists.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or form type..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Form Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="light-delivery">Light Delivery</SelectItem>
-                <SelectItem value="excavator-loader">Excavator Loader</SelectItem>
-                <SelectItem value="excavator-harvester">Excavator Harvester</SelectItem>
-                <SelectItem value="lowbed-trailer">Lowbed & Roll Back</SelectItem>
-                <SelectItem value="mechanic-ldv">Mechanic LDV</SelectItem>
-                <SelectItem value="personal-labour-carrier">Labour Carrier</SelectItem>
-                <SelectItem value="ponsse-bison">Ponsse Bison</SelectItem>
-                <SelectItem value="self-loading-forwarder">Self Loading Forwarder</SelectItem>
-                <SelectItem value="skidder">Skidder</SelectItem>
-                <SelectItem value="timber-truck-trailer">Timber Truck</SelectItem>
-                <SelectItem value="trailer">Trailer</SelectItem>
-                <SelectItem value="service-diesel-truck">Service Diesel</SelectItem>
-                <SelectItem value="vehicle-job-card">Job Card</SelectItem>
-                <SelectItem value="water-cart-trailer">Water Cart</SelectItem>
-                <SelectItem value="weekly-machinery-condition">Weekly Machinery</SelectItem>
-                <SelectItem value="bell-timber-truck">Bell Timber</SelectItem>
-                <SelectItem value="daily-attachment-checklist">Daily Attachment</SelectItem>
-                <SelectItem value="daily-machine-checklist">Daily Machine</SelectItem>
-                <SelectItem value="dezzi-timber-truck">Dezzi Timber</SelectItem>
-                <SelectItem value="diesel-cart-trailer">Diesel Cart</SelectItem>
-                <SelectItem value="cintasign-shorthaul">Cintasign Shorthaul</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={defectFilter} onValueChange={setDefectFilter}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="defects">With Defects</SelectItem>
-                <SelectItem value="clean">Clean Only</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchSubmissions}
-              disabled={loading}
-              className="gap-2 bg-transparent"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+        {/* Submissions Tab */}
+        <TabsContent value="submissions" className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Card>
+              <CardContent className="flex items-center gap-3 pt-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-foreground">{totalSubmissions}</div>
+                  <div className="text-xs text-muted-foreground">Total Submissions</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 pt-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-foreground">{defectCount}</div>
+                  <div className="text-xs text-muted-foreground">With Defects</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 pt-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[hsl(142,76%,36%)]/10">
+                  <CheckCircle2 className="h-5 w-5 text-[hsl(142,76%,36%)]" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-foreground">{cleanCount}</div>
+                  <div className="text-xs text-muted-foreground">Clean Inspections</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 pt-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-foreground">{todayCount}</div>
+                  <div className="text-xs text-muted-foreground">Today</div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Table */}
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <ClipboardList className="mb-3 h-10 w-10 text-muted-foreground/40" />
-              <p className="text-sm font-medium text-muted-foreground">
-                No submissions found
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                {totalSubmissions === 0
-                  ? "Submissions will appear here once users complete inspection forms."
-                  : "Try adjusting your filters to find what you're looking for."}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="text-foreground">Submitted By</TableHead>
-                    <TableHead className="text-foreground">Form Type</TableHead>
-                    <TableHead className="text-foreground">Brand</TableHead>
-                    <TableHead className="text-foreground">Date</TableHead>
-                    <TableHead className="text-foreground">Status</TableHead>
-                    <TableHead className="text-right text-foreground">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((sub) => (
-                    <TableRow
-                      key={sub.id}
-                      className={`${sub.hasDefects ? "bg-destructive/5" : ""} ${!sub.isRead ? "border-l-4 border-l-blue-500" : ""}`}
-                    >
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          {sub.submittedBy}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getFormIcon(sub.formType)}
-                          <span className="text-foreground">
-                            {formTypeLabel(sub.formType)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <BrandBadge brand={sub.brand} />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(sub.submittedAt).toLocaleDateString("en-ZA", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        {sub.hasDefects ? (
-                          <Badge className="bg-destructive text-destructive-foreground">
-                            Defects Found
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)]">
-                            Clean
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedSubmission(sub)
-                              setDialogTab("preview")
-                              if (!sub.isRead) {
-                                markAsRead(sub.id)
-                              }
-                            }}
-                            className="gap-2 text-primary"
-                          >
-                            <Eye className="h-4 w-4" />
-                            <span className="hidden sm:inline">View</span>
-                          </Button>
-                          
-                          {!sub.isRead && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => markAsRead(sub.id)}
-                              className="gap-2 text-green-600"
-                              title="Mark as read"
-                            >
-                              <CheckCircle2 className="h-4 w-4" />
-                              <span className="hidden sm:inline">Mark Read</span>
-                            </Button>
-                          )}
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <span className="sr-only">Open export menu</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
+          {/* Submissions Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base text-foreground">Submissions</CardTitle>
+              <CardDescription>
+                Filter and review all submitted inspection checklists.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or form type..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Form Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="light-delivery">Light Delivery</SelectItem>
+                    <SelectItem value="excavator-loader">Excavator Loader</SelectItem>
+                    <SelectItem value="excavator-harvester">Excavator Harvester</SelectItem>
+                    <SelectItem value="lowbed-trailer">Lowbed & Roll Back</SelectItem>
+                    <SelectItem value="mechanic-ldv">Mechanic LDV</SelectItem>
+                    <SelectItem value="personal-labour-carrier">Labour Carrier</SelectItem>
+                    <SelectItem value="ponsse-bison">Ponsse Bison</SelectItem>
+                    <SelectItem value="self-loading-forwarder">Self Loading Forwarder</SelectItem>
+                    <SelectItem value="skidder">Skidder</SelectItem>
+                    <SelectItem value="timber-truck-trailer">Timber Truck</SelectItem>
+                    <SelectItem value="trailer">Trailer</SelectItem>
+                    <SelectItem value="service-diesel-truck">Service Diesel</SelectItem>
+                    <SelectItem value="vehicle-job-card">Job Card</SelectItem>
+                    <SelectItem value="water-cart-trailer">Water Cart</SelectItem>
+                    <SelectItem value="weekly-machinery-condition">Weekly Machinery</SelectItem>
+                    <SelectItem value="bell-timber-truck">Bell Timber</SelectItem>
+                    <SelectItem value="daily-attachment-checklist">Daily Attachment</SelectItem>
+                    <SelectItem value="daily-machine-checklist">Daily Machine</SelectItem>
+                    <SelectItem value="dezzi-timber-truck">Dezzi Timber</SelectItem>
+                    <SelectItem value="diesel-cart-trailer">Diesel Cart</SelectItem>
+                    <SelectItem value="cintasign-shorthaul">Cintasign Shorthaul</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={defectFilter} onValueChange={setDefectFilter}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="defects">With Defects</SelectItem>
+                    <SelectItem value="clean">Clean Only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchSubmissions}
+                  disabled={loading}
+                  className="gap-2 bg-transparent"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+
+              {filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <ClipboardList className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                  <p className="text-sm font-medium text-muted-foreground">
+                    No submissions found
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/70">
+                    {totalSubmissions === 0
+                      ? "Submissions will appear here once users complete inspection forms."
+                      : "Try adjusting your filters to find what you're looking for."}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="text-foreground">Submitted By</TableHead>
+                        <TableHead className="text-foreground">Form Type</TableHead>
+                        <TableHead className="text-foreground">Brand</TableHead>
+                        <TableHead className="text-foreground">Date</TableHead>
+                        <TableHead className="text-foreground">Status</TableHead>
+                        <TableHead className="text-right text-foreground">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map((sub) => (
+                        <TableRow
+                          key={sub.id}
+                          className={sub.hasDefects ? "bg-destructive/5" : ""}
+                        >
+                          <TableCell className="font-medium text-foreground">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              {sub.submittedBy}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getFormIcon(sub.formType)}
+                              <span className="text-foreground">
+                                {formTypeLabel(sub.formType)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <BrandBadge brand={sub.brand} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {new Date(sub.submittedAt).toLocaleDateString("en-ZA", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </TableCell>
+                          <TableCell>
+                            {sub.hasDefects ? (
+                              <Badge className="bg-destructive text-destructive-foreground">
+                                Defects Found
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-[hsl(142,76%,36%)] text-[hsl(0,0%,100%)]">
+                                Clean
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => {
                                   setSelectedSubmission(sub)
                                   setDialogTab("preview")
                                 }}
+                                className="gap-2 text-primary"
                               >
-                                <Eye className="mr-2 h-4 w-4" />
-                                Preview
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleSinglePDF(sub)}>
-                                <FileDown className="mr-2 h-4 w-4" />
-                                Download PDF
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleSingleCSV(sub)}>
-                                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                                Download CSV
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {/* ✅ Delete button */}
-                              <DropdownMenuItem 
-                                onClick={() => handleDelete(sub.id)}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                                <Eye className="h-4 w-4" />
+                                <span className="hidden sm:inline">View</span>
+                              </Button>
+                              
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Open export menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedSubmission(sub)
+                                      setDialogTab("preview")
+                                    }}
+                                  >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    Preview
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleSinglePDF(sub)}>
+                                    <FileDown className="mr-2 h-4 w-4" />
+                                    Download PDF
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleSingleCSV(sub)}>
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                    Download CSV
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDelete(sub.id)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics">
+          <AdminReports submissions={submissions} />
+        </TabsContent>
+      </Tabs>
 
       {/* Submission Detail / Preview Dialog */}
       <Dialog
         open={!!selectedSubmission}
         onOpenChange={(open) => {
-          if (!open && selectedSubmission && !selectedSubmission.isRead) {
-            markAsRead(selectedSubmission.id)
-          }
-          setSelectedSubmission(null)
+          if (!open) setSelectedSubmission(null)
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
@@ -1033,7 +1208,6 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
               >
                 <ScrollArea className="h-[55vh] pr-4">
                   <div className="space-y-4">
-                    {/* Overall Status */}
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">
                         Overall Status:
@@ -1051,7 +1225,6 @@ export function AdminDashboard({ initialSubmissions = [] }: AdminDashboardProps)
 
                     <Separator />
 
-                    {/* Raw Data - pretty‑printed JSON for better visibility */}
                     <div>
                       <h4 className="mb-2 text-sm font-semibold text-foreground">
                         Full Submission Data

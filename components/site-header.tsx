@@ -30,10 +30,10 @@ export function SiteHeader({ role }: SiteHeaderProps) {
         <div className="flex items-center gap-4">
           <Link href={role === "admin" ? "/admin" : "/"} className="flex items-center gap-3">
             <Image
-              src="/images/ringomode-logo.png"
-              alt="Ringomode DSP logo"
-              width={120}
-              height={40}
+              src="/images/dsp-logo.png"
+              alt=" DSP logo"
+              width={40}
+              height={20}
               className="object-contain"
             />
           </Link>

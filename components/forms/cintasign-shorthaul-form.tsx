@@ -6,13 +6,11 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, ArrowLeft, Send } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
 import { toast } from "sonner"
-import { exportSubmissionToPDF } from "@/lib/export-utils"
-import type { Submission, FleetEntry, BreakdownEntry } from "@/lib/types"
 import { BrandLogo } from "@/components/brand-logo"
 import { Separator } from "@/components/ui/separator"
+import type { FleetEntry, BreakdownEntry } from "@/lib/types"
 
 export default function CintasignShorthaulForm() {
     const [formData, setFormData] = useState({
@@ -42,8 +40,8 @@ export default function CintasignShorthaulForm() {
         }))
     })
 
+    const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSubmitted, setIsSubmitted] = useState(false)
-    const [submissionData, setSubmissionData] = useState<Submission | null>(null)
 
     const handleFleetChange = (index: number, field: keyof FleetEntry, value: string) => {
         const newFleet = [...formData.fleetEntries]
@@ -59,28 +57,39 @@ export default function CintasignShorthaulForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        setIsSubmitting(true)
 
-        // In a real implementation, you would send this to your API
-        // For now, we store in localStorage as a placeholder
-        const submission: Submission = {
-            id: Math.random().toString(36).substring(2, 9),
-            formType: "cintasign-shorthaul",
-            formTitle: "Cintasign Shorthaul Trip Sheet",
-            submittedAt: new Date().toISOString(),
-            submittedBy: "Trip Manager",
-            data: formData,
-            hasDefects: false,
-            brand: "cintasign", // or get from cookie
+        try {
+            const submissionData = {
+                formType: "cintasign-shorthaul",
+                formTitle: "Cintasign Shorthaul Trip Sheet",
+                submittedBy: "Trip Manager",
+                hasDefects: false,
+                brand: "cintasign",
+                data: formData,
+            }
+
+            const response = await fetch("/api/submissions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(submissionData),
+            })
+
+            if (!response.ok) {
+                throw new Error("Failed to submit")
+            }
+
+            setIsSubmitted(true)
+            toast.success("Logistics report submitted successfully!")
+        } catch (error) {
+            toast.error("An error occurred. Please try again.")
+        } finally {
+            setIsSubmitting(false)
         }
-        const existing = JSON.parse(localStorage.getItem("form_submissions") || "[]")
-        localStorage.setItem("form_submissions", JSON.stringify([...existing, submission]))
-
-        setSubmissionData(submission)
-        setIsSubmitted(true)
-        toast.success("Logistics report submitted successfully!")
     }
 
-    if (isSubmitted && submissionData) {
+    if (isSubmitted) {
         return (
             <div className="flex min-h-[80vh] items-center justify-center p-4">
                 <Card className="w-full max-w-md text-center">
@@ -95,13 +104,6 @@ export default function CintasignShorthaulForm() {
                             Your Cintasign Shorthaul report has been recorded.
                         </p>
                         <div className="flex flex-col gap-2">
-                            <Button
-                                onClick={() => exportSubmissionToPDF(submissionData)}
-                                className="w-full gap-2 bg-primary hover:bg-primary/90"
-                            >
-                                <Image src="/images/pdf-icon.png" alt="PDF" width={20} height={20} className="invert brightness-0" />
-                                Download PDF
-                            </Button>
                             <Button variant="outline" onClick={() => window.location.href = "/"} className="w-full">
                                 Back to Dashboard
                             </Button>
@@ -292,10 +294,11 @@ export default function CintasignShorthaulForm() {
                 </Button>
                 <Button
                     type="submit"
+                    disabled={isSubmitting}
                     className="gap-2 bg-[#fbb016] hover:bg-[#e5a014] text-black font-bold"
                 >
                     <Send className="h-4 w-4" />
-                    Submit Report
+                    {isSubmitting ? "Submitting..." : "Submit Report"}
                 </Button>
             </div>
 

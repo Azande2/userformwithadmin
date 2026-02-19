@@ -1180,7 +1180,7 @@ export function exportSingleSubmissionToCSV(sub: Submission): void {
 }
 
 // ============================================================================
-// PDF EXPORT – now with icon fallback and defect box spacing
+// PDF EXPORT – with fixes for Cintasign Shorthaul, icon fallback, and defect box spacing
 // ============================================================================
 export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
   const { default: jsPDF } = await import("jspdf")
@@ -1511,10 +1511,10 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
   } else if (sub.formType === "cintasign-shorthaul") {
     // ----- CINTASIGN SHORTHAUL: render fleet and breakdown tables -----
-    const data = sub.data as any; // safe because we've checked formType
+    const data = sub.data as any;
 
     // Fleet entries table
-    if (data.fleetEntries && data.fleetEntries.length > 0) {
+    if (Array.isArray(data.fleetEntries) && data.fleetEntries.length > 0) {
       if (y > pageHeight - 70) {
         doc.addPage();
         y = 20;
@@ -1526,19 +1526,21 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       y += 5;
 
       const fleetHeaders = ["Fleet No", "Operator", "Shift", "Compartment", "Loads", "Est Tons", "Open", "Close", "Worked", "Loads/hr", "Tons/hr"];
-      const fleetRows = data.fleetEntries.map((entry: any) => [
-        entry.fleetNo,
-        entry.operator,
-        entry.shift,
-        entry.compartment,
-        entry.noOfLoads,
-        entry.estTons,
-        entry.hoursOpen,
-        entry.hoursClose,
-        entry.hoursWorked,
-        entry.loadsPerHour,
-        entry.tonsPerHour,
-      ]);
+      const fleetRows = data.fleetEntries.map((entry: any) => {
+        return [
+          entry.fleetNo !== undefined ? String(entry.fleetNo) : '',
+          entry.operator !== undefined ? String(entry.operator) : '',
+          entry.shift !== undefined ? String(entry.shift) : '',
+          entry.compartment !== undefined ? String(entry.compartment) : '',
+          entry.noOfLoads !== undefined ? String(entry.noOfLoads) : '',
+          entry.estTons !== undefined ? String(entry.estTons) : '',
+          entry.hoursOpen !== undefined ? String(entry.hoursOpen) : '',
+          entry.hoursClose !== undefined ? String(entry.hoursClose) : '',
+          entry.hoursWorked !== undefined ? String(entry.hoursWorked) : '',
+          entry.loadsPerHour !== undefined ? String(entry.loadsPerHour) : '',
+          entry.tonsPerHour !== undefined ? String(entry.tonsPerHour) : '',
+        ];
+      });
 
       (doc as any).autoTable({
         startY: y,
@@ -1554,7 +1556,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
     }
 
     // Breakdown entries table
-    if (data.breakdownEntries && data.breakdownEntries.length > 0) {
+    if (Array.isArray(data.breakdownEntries) && data.breakdownEntries.length > 0) {
       if (y > pageHeight - 70) {
         doc.addPage();
         y = 20;
@@ -1566,13 +1568,15 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       y += 5;
 
       const breakdownHeaders = ["Machine ID", "Operator", "Stop", "Start", "Details"];
-      const breakdownRows = data.breakdownEntries.map((entry: any) => [
-        entry.machineId,
-        entry.operator,
-        entry.stop,
-        entry.start,
-        entry.details,
-      ]);
+      const breakdownRows = data.breakdownEntries.map((entry: any) => {
+        return [
+          entry.machineId !== undefined ? String(entry.machineId) : '',
+          entry.operator !== undefined ? String(entry.operator) : '',
+          entry.stop !== undefined ? String(entry.stop) : '',
+          entry.start !== undefined ? String(entry.start) : '',
+          entry.details !== undefined ? String(entry.details) : '',
+        ];
+      });
 
       (doc as any).autoTable({
         startY: y,
@@ -1594,7 +1598,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
     // Extract fields with sensible defaults (match web form field names)
     const driverName = data.driverName || data.driversName || '';
-    const jobCardNumber = data.jobCardNumber || data.documentNo || '';  // fallback to documentNo
+    const jobCardNumber = data.jobCardNumber || data.documentNo || '';
     const machineVehicle = data.machineVehicle || data.machine || data.vehicle || '';
     const registrationNumber = data.machineRegNumber || data.registrationNumber || data.regNo || '';
     const hourMeterKM = data.hourMeterKmReading || data.hourMeterKM || data.hourMeter || data.kmReading || '';
@@ -1607,7 +1611,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
 
     const mechanicsName = data.mechanicsName || '';
     const operatorsName = data.operatorsName || data.operatorName || '';
-    const mechanicsSignature = data.mechanicSignature || data.signature || '';  // from web form
+    const mechanicsSignature = data.mechanicSignature || data.signature || '';
     const operatorsSignature = data.operatorSignature || '';
 
     // ------------------------------------------------------------------------
@@ -1663,7 +1667,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       head: [['Mechanic', '', 'Operator', '']],
       body: [
         ['Name:', mechanicsName, 'Name:', operatorsName],
-        ['Signature:', '', 'Signature:', ''] // placeholders, images drawn via didDrawCell
+        ['Signature:', '', 'Signature:', '']
       ],
       theme: 'grid',
       headStyles: { fillColor: [34, 100, 54], textColor: 255, fontSize: 9, halign: 'left' },
@@ -1676,7 +1680,6 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       },
       margin: { left: 14, right: 14 },
       didDrawCell: (cellData: any) => {
-        // Draw mechanic signature in row 1, column 1 (index 1)
         if (cellData.section === 'body' && cellData.row.index === 1 && cellData.column.index === 1) {
           if (mechanicsSignature && mechanicsSignature.startsWith('data:image')) {
             try {
@@ -1691,7 +1694,6 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
             doc.text(mechanicsSignature, cellData.cell.x + 2, cellData.cell.y + cellData.cell.height/2);
           }
         }
-        // Draw operator signature in row 1, column 3 (index 3)
         if (cellData.section === 'body' && cellData.row.index === 1 && cellData.column.index === 3) {
           if (operatorsSignature && operatorsSignature.startsWith('data:image')) {
             try {
@@ -1841,7 +1843,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       y = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // ----- Defect Details (now inside a box, with proper spacing) -----
+    // ----- Defect Details (inside a box with proper spacing) -----
     if (hasDefectDetails(sub.data) && sub.data.defectDetails) {
       y += 5;
       if (y > pageHeight - 70) { // leave room for box and signature
@@ -1855,7 +1857,7 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       const lineHeight = 5;
       const textHeight = textLines.length * lineHeight;
       const titleHeight = 7;
-      const padding = 8; // increased padding for better look
+      const padding = 8;
       const boxWidth = pageWidth - 28; // 14 left + 14 right
       const boxHeight = titleHeight + textHeight + padding * 2;
 
@@ -1877,8 +1879,9 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       doc.setTextColor(60);
       doc.text(textLines, boxX + padding, boxY + padding + titleHeight + 3);
 
-      // Update y position – add extra space after the box
-      y = boxY + boxHeight + 12; // increased gap
+      // Update y position – add extra space after the box (20mm to match spacing above)
+      const gapAfterDefect = 20;
+      y = boxY + boxHeight + gapAfterDefect;
     }
 
     // ----- Signature -----

@@ -352,10 +352,20 @@ const lowbedItemIconMap: Record<string, string> = {
   "Handbrake and Trailer Brakes (If Fitted)": "hand-brake.png",
   "Battery": "battery.png",
   "Radiator": "radiator.png",
+  "Wiring": "wiring.png",
   "Air Tank Drain": "air-fuel-leaks.png",
   "Oil/Fluid/Air Levels": "oil-fluid-air-level.png",
   "Fuel, Air and Oil leaks": "fuel-leaks.png",
-  "Differentials": "differentials.png"
+  "Differentials": "differentials.png",
+  "Tyres": "types-spares.png",
+  "Mud Flaps": "mud-flap.png",
+  "Hoses & Fittings (Air & Hydraulics)": "hydraulic-hoses.png",
+  "Hydraulic Controls": "hydraulic-controls.png",
+  "Trailer Deck": "boom-structure.png",
+  "Tow Bar & Hitch/King Pin": "tow-hitch.png",
+  "Landing Gear": "landing-gear.png",
+  "Anchor Points, Chains & Binders": "anchor-points.png",
+  "Chevron, Reflectors and Tape": "led.png"
 };
 
 const mechanicLDVIconMap: Record<string, string> = {
@@ -861,6 +871,11 @@ const dieselCartTrailerIconMap: Record<string, string> = {
 };
 
 // ============================================================================
+// FALLBACK ICON – used when a specific item icon is missing
+// ============================================================================
+const FALLBACK_ICON = "license2.png";
+
+// ============================================================================
 // HELPER: Get the correct icon map for a form type
 // ============================================================================
 function getIconMapForForm(formType: string): Record<string, string> | null {
@@ -1165,7 +1180,7 @@ export function exportSingleSubmissionToCSV(sub: Submission): void {
 }
 
 // ============================================================================
-// PDF EXPORT – now with a clean vehicle‑job‑card branch matching the provided template
+// PDF EXPORT – now with icon fallback and defect box spacing
 // ============================================================================
 export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
   const { default: jsPDF } = await import("jspdf")
@@ -1717,10 +1732,16 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       // Preload icons only if needed
       let iconBase64Map: Map<string, string> = new Map();
       if (hasIcons) {
-        const iconFilenames = items
-          .map(item => iconMapForForm?.[item])
-          .filter(f => f) as string[];
-        iconBase64Map = await preloadIcons(iconFilenames);
+        // For each item, get the icon filename (use fallback if missing)
+        const iconFilenames = items.map(item => {
+          const iconFile = iconMapForForm?.[item];
+          return iconFile || FALLBACK_ICON;
+        });
+        const unique = Array.from(new Set(iconFilenames));
+        await Promise.all(unique.map(async (f) => {
+          const base64 = await getImageBase64(f);
+          if (base64) iconBase64Map.set(f, base64);
+        }));
       }
 
       // Prepare table configuration
@@ -1745,10 +1766,13 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
         didDrawCell = (cellData: any): void => {
           if (cellData.section === 'body' && cellData.column.index === 1) {
             const item = cellData.row.raw[0] as string;
-            const iconFile = iconMapForForm?.[item];
-            if (!iconFile) return;
-            const base64 = iconBase64Map.get(iconFile);
-            if (!base64) return;
+            const iconFile = iconMapForForm?.[item] || FALLBACK_ICON;
+            // Try to get base64 for the intended icon; if missing, try fallback
+            let base64 = iconBase64Map.get(iconFile);
+            if (!base64 && iconFile !== FALLBACK_ICON) {
+              base64 = iconBase64Map.get(FALLBACK_ICON);
+            }
+            if (!base64) return; // still nothing – cannot draw
 
             try {
               const cellWidth = cellData.cell.width;
@@ -1817,22 +1841,44 @@ export async function exportSubmissionToPDF(sub: Submission): Promise<void> {
       y = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // ----- Defect Details -----
+    // ----- Defect Details (now inside a box, with proper spacing) -----
     if (hasDefectDetails(sub.data) && sub.data.defectDetails) {
       y += 5;
-      if (y > pageHeight - 50) {
+      if (y > pageHeight - 70) { // leave room for box and signature
         doc.addPage()
         y = 20
       }
-      doc.setFontSize(10)
-      doc.setTextColor(220, 50, 50)
-      doc.text("Defect Details:", 14, y)
-      y += 7
-      doc.setFontSize(8)
-      doc.setTextColor(60)
-      const lines: string[] = doc.splitTextToSize(sub.data.defectDetails, pageWidth - 28)
-      doc.text(lines, 14, y)
-      y += lines.length * 5 + 10
+
+      // Prepare text
+      doc.setFontSize(8);
+      const textLines = doc.splitTextToSize(sub.data.defectDetails, pageWidth - 48); // 14+10 margin left + 10 right = 24, so width = pageWidth-48
+      const lineHeight = 5;
+      const textHeight = textLines.length * lineHeight;
+      const titleHeight = 7;
+      const padding = 8; // increased padding for better look
+      const boxWidth = pageWidth - 28; // 14 left + 14 right
+      const boxHeight = titleHeight + textHeight + padding * 2;
+
+      const boxX = 14;
+      const boxY = y - 3; // small gap above
+
+      // Draw box
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(250, 250, 250);
+      doc.rect(boxX, boxY, boxWidth, boxHeight, 'FD'); // filled and stroked
+
+      // Title
+      doc.setFontSize(10);
+      doc.setTextColor(220, 50, 50);
+      doc.text("Defect Details:", boxX + padding, boxY + padding + 3);
+
+      // Details text
+      doc.setFontSize(8);
+      doc.setTextColor(60);
+      doc.text(textLines, boxX + padding, boxY + padding + titleHeight + 3);
+
+      // Update y position – add extra space after the box
+      y = boxY + boxHeight + 12; // increased gap
     }
 
     // ----- Signature -----
